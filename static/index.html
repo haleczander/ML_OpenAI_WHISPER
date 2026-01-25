@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dictation Studio</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="bg-orb orb-a"></div>
+    <div class="bg-orb orb-b"></div>
+
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="badge">Dictation locale</p>
+          <h1>Dictation Studio</h1>
+          <p class="subtitle">
+            Dicter, transcrire, verifier. Le serveur tourne localement chez le
+            dicteur.
+          </p>
+        </div>
+        <div class="stats">
+          <div>
+            <span id="statusDot" class="dot"></span>
+            <span id="statusText">Hors ligne</span>
+          </div>
+          <div class="model" id="modelInfo">Modele: -</div>
+        </div>
+      </header>
+
+      <section class="card recorder">
+        <div class="card-header">
+          <h2>Dictation</h2>
+          <p>Enregistrer au micro et envoyer pour transcription.</p>
+        </div>
+        <div class="controls">
+          <button id="startBtn" class="btn primary">Demarrer</button>
+          <button id="stopBtn" class="btn ghost" disabled>Stop</button>
+          <span id="timer" class="timer">00:00</span>
+        </div>
+        <div class="upload">
+          <input id="fileInput" type="file" accept="audio/*" />
+          <button id="uploadBtn" class="btn secondary">Uploader un fichier</button>
+        </div>
+        <div id="liveState" class="state">Pret.</div>
+      </section>
+
+      <section class="card history">
+        <div class="card-header">
+          <h2>Dernieres dictes</h2>
+          <p>Audio et transcript pour validation rapide.</p>
+        </div>
+        <div id="items" class="items"></div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

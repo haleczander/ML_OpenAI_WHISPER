@@ -1,0 +1,257 @@
+:root {
+  --bg: #f2efe6;
+  --ink: #1f1a17;
+  --muted: #6b5f57;
+  --accent: #f06b3f;
+  --accent-dark: #c5502b;
+  --card: #fffaf1;
+  --line: #e3d6c9;
+  --shadow: rgba(24, 16, 12, 0.18);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Palatino Linotype", "Book Antiqua", "Palatino", serif;
+  color: var(--ink);
+  background: radial-gradient(circle at top, #fff6e8 0%, var(--bg) 60%);
+  position: relative;
+  overflow-x: hidden;
+}
+
+.bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(0px);
+  opacity: 0.6;
+  z-index: 0;
+}
+
+.orb-a {
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle at 30% 30%, #f06b3f, #e9a07a);
+  top: -120px;
+  right: -140px;
+}
+
+.orb-b {
+  width: 360px;
+  height: 360px;
+  background: radial-gradient(circle at 30% 30%, #4c7d7b, #9bb5ab);
+  bottom: -140px;
+  left: -160px;
+}
+
+.shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+  position: relative;
+  z-index: 1;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 32px;
+  align-items: flex-end;
+  margin-bottom: 32px;
+  animation: fadeUp 0.7s ease-out;
+}
+
+.badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #f8f1e7;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+h1 {
+  font-size: 42px;
+  margin: 0 0 8px;
+}
+
+.subtitle {
+  max-width: 520px;
+  color: var(--muted);
+  margin: 0;
+  font-size: 18px;
+}
+
+.stats {
+  text-align: right;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: #d18b7a;
+}
+
+.dot.online {
+  background: #4c7d7b;
+}
+
+.model {
+  margin-top: 8px;
+  font-weight: bold;
+  color: var(--ink);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 40px var(--shadow);
+  border-radius: 22px;
+  padding: 24px 28px;
+  margin-bottom: 28px;
+  animation: fadeUp 0.8s ease-out;
+}
+
+.card-header h2 {
+  margin: 0 0 4px;
+}
+
+.card-header p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.btn {
+  border: none;
+  cursor: pointer;
+  padding: 12px 20px;
+  border-radius: 999px;
+  font-weight: 600;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(240, 107, 63, 0.25);
+}
+
+.btn.secondary {
+  background: #1f1a17;
+  color: #fdf4ea;
+}
+
+.btn.ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 22px rgba(24, 16, 12, 0.2);
+}
+
+.timer {
+  font-family: "Courier New", monospace;
+  font-weight: bold;
+  color: var(--ink);
+}
+
+.upload {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.upload input[type="file"] {
+  padding: 8px;
+}
+
+.state {
+  margin-top: 12px;
+  color: var(--muted);
+}
+
+.items {
+  margin-top: 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.item {
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #fffdf7;
+}
+
+.item-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.item audio {
+  width: 100%;
+  margin: 8px 0;
+}
+
+.transcript {
+  background: #f7eee4;
+  padding: 12px;
+  border-radius: 12px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.delete {
+  margin-top: 10px;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 900px) {
+  .hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .stats {
+    text-align: left;
+  }
+}
