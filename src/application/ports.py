@@ -27,13 +27,7 @@ class FilePersistPort(Protocol):
     def ensure_dirs(self) -> None:
         ...
 
-    def save_uploaded_file(self, file_obj, relative_path: str) -> None:
-        ...
-
     def save_bytes(self, payload: bytes, relative_path: str) -> None:
-        ...
-
-    def convert_to_mp3_if_possible(self, src_relative_path: str) -> str:
         ...
 
     def write_text(self, relative_path: str, content: str) -> None:

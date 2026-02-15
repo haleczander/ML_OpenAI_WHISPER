@@ -32,15 +32,6 @@ class TranscribeUseCase:
             text_post_processor=text_post_processor,
         )
 
-    def from_upload(self, uploaded_file) -> tuple[Item, str]:
-        filename = getattr(uploaded_file, "filename", "") or "audio.webm"
-        suffix = Path(filename).suffix.lower() or ".webm"
-        return self._transcribe_and_store(
-            save_source=lambda relative_path: self._file_persist.save_uploaded_file(uploaded_file, relative_path),
-            input_suffix=suffix,
-            submitted_at=self._utc_now(),
-        )
-
     def from_bytes(
         self,
         payload: bytes,
