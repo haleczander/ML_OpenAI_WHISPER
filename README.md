@@ -41,6 +41,12 @@ Installation:
 .\deploy\install.ps1
 ```
 
+Ou en double-clic Windows:
+
+```bat
+install.bat
+```
+
 Packaging "portable" (sans installation systeme ffmpeg/certs):
 - Deposer `ffmpeg.exe` dans `vendor/ffmpeg/bin/ffmpeg.exe`
 - Deposer les certs dans `deploy/certs/local.pem` et `deploy/certs/local-key.pem`
@@ -54,6 +60,13 @@ Lancement:
 
 # HTTPS (mobile/micro navigateur)
 .\deploy\run.ps1 -Https
+```
+
+Ou en double-clic Windows:
+
+```bat
+run.bat
+run.bat http
 ```
 
 ## App locale (serveur + front)

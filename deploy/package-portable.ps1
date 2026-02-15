@@ -68,6 +68,8 @@ if ((Test-Path $rootCert) -and (Test-Path $rootKey)) {
 $items = @(
     "server.py",
     "requirements.txt",
+    "install.bat",
+    "run.bat",
     "src",
     "static",
     "deploy\install.ps1",
