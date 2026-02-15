@@ -25,6 +25,20 @@ class JsonItemRepository:
         items.append(item)
         self._save_items(items)
 
+    def upsert(self, item: Item) -> None:
+        items = self.list_items()
+        updated = False
+        result: list[Item] = []
+        for existing in items:
+            if existing.id == item.id:
+                result.append(item)
+                updated = True
+            else:
+                result.append(existing)
+        if not updated:
+            result.append(item)
+        self._save_items(result)
+
     def delete(self, item_id: str) -> Item | None:
         items = self.list_items()
         remaining: list[Item] = []

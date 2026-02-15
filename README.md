@@ -11,6 +11,7 @@ Ce depot utilise Codex pour aider au developpement et aux iterations rapides.
 - `src/adapters/persistence`: persistence JSON des items.
 - `src/adapters/storage`: persistence fichiers sur le filesystem + conversion mp3 via ffmpeg.
 - `src/adapters/transcription`: implementation Whisper du port de transcription.
+- `src/adapters/text`: post-processing texte ultra-leger par regex (instructions de dictee -> ponctuation/mise en page).
 - `server.py`: API Flask/WebSocket qui expose les use cases (`upload/transcribe`, `get`, `list`, `delete`).
 
 ## Scripts

@@ -49,12 +49,23 @@
         <div id="liveState" class="state">Pret a enregistrer.</div>
       </section>
 
+      <section class="card queue">
+        <div class="card-header">
+          <h2>Transcriptions En Attente</h2>
+          <p>Jobs en file et en cours avec date de lancement.</p>
+        </div>
+        <div id="jobs" class="jobs"></div>
+      </section>
+
       <section class="card history">
         <div class="card-header">
           <h2>Historique</h2>
           <p>Audio et transcription associee.</p>
         </div>
         <div id="items" class="items"></div>
+        <div class="history-more-wrap">
+          <button id="itemsMoreBtn" class="btn ghost">... Voir plus</button>
+        </div>
       </section>
     </main>
 

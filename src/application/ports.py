@@ -16,6 +16,9 @@ class ItemRepositoryPort(Protocol):
     def add(self, item: Item) -> None:
         ...
 
+    def upsert(self, item: Item) -> None:
+        ...
+
     def delete(self, item_id: str) -> Item | None:
         ...
 
@@ -56,4 +59,9 @@ class TranscribePort(Protocol):
 
     @property
     def device(self) -> str:
+        ...
+
+
+class TextPostProcessorPort(Protocol):
+    def process(self, text: str) -> str:
         ...
