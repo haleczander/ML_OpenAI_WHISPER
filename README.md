@@ -4,6 +4,10 @@ POC de transcription vocale avec OpenAI Whisper.
 
 Ce depot utilise Codex pour aider au developpement et aux iterations rapides.
 
+## Telechargement direct
+
+- ZIP portable (latest): https://github.com/haleczander/ML_OpenAI_WHISPER/releases/latest/download/dictee_courriels.zip
+
 ## Architecture (Clean)
 
 - `src/domain`: entites metier (`Item`).
@@ -22,6 +26,34 @@ Ce depot utilise Codex pour aider au developpement et aux iterations rapides.
 
 ```bash
 pip install -r requirements.txt
+```
+
+## Mode portable Windows
+
+Prerequis:
+- Python 3.10+ installe et accessible via `py` ou `python`
+- ffmpeg: soit installe dans le `PATH`, soit embarque dans `vendor/ffmpeg/bin/ffmpeg.exe`
+- Certificats HTTPS: soit deja presents dans `certs/`, soit embarques dans `deploy/certs/local.pem` et `deploy/certs/local-key.pem`
+
+Installation:
+
+```powershell
+.\deploy\install.ps1
+```
+
+Packaging "portable" (sans installation systeme ffmpeg/certs):
+- Deposer `ffmpeg.exe` dans `vendor/ffmpeg/bin/ffmpeg.exe`
+- Deposer les certs dans `deploy/certs/local.pem` et `deploy/certs/local-key.pem`
+- Lancer `.\deploy\install.ps1` (copie auto des certs vers `certs/`)
+
+Lancement:
+
+```powershell
+# HTTP (desktop simple)
+.\deploy\run.ps1
+
+# HTTPS (mobile/micro navigateur)
+.\deploy\run.ps1 -Https
 ```
 
 ## App locale (serveur + front)
@@ -55,21 +87,3 @@ python server.py
 ```
 
 Et ouvrir `https://<IP-LAN>:8000` sur l'iPhone.
-
-## Docker (test local rapide)
-
-Prerequis:
-- Docker Desktop
-- Certificats presents dans `certs/local.pem` et `certs/local-key.pem`
-
-Lancer:
-
-```bash
-docker compose up --build
-```
-
-Arreter:
-
-```bash
-docker compose down
-```

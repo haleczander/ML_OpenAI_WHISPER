@@ -258,6 +258,7 @@ function renderJobs(jobs) {
     node.className = "job";
     const submitted = job.submitted_at ? new Date(job.submitted_at).toLocaleString() : "-";
     const started = job.started_at ? new Date(job.started_at).toLocaleString() : "en attente";
+    const errorLine = job.error ? `<div class="job-meta">Erreur: ${job.error}</div>` : "";
     node.innerHTML = `
       <div class="job-head">
         <span>Job ${job.id.slice(0, 8)}</span>
@@ -265,6 +266,7 @@ function renderJobs(jobs) {
       </div>
       <div class="job-meta">Lancement: ${submitted}</div>
       <div class="job-meta">Demarrage: ${started}</div>
+      ${errorLine}
     `;
     jobsContainer.appendChild(node);
   });

@@ -1,5 +1,7 @@
 from __future__ import annotations
 import json
+import logging
+import os
 import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -17,12 +19,54 @@ BASE_DIR = Path(__file__).resolve().parent
 CERT_DIR = BASE_DIR / "certs"
 CERT_PATH = CERT_DIR / "local.pem"
 KEY_PATH = CERT_DIR / "local-key.pem"
+LOG_DIR = BASE_DIR / "data" / "logs"
+LOG_PATH = LOG_DIR / "server.log"
+RUNTIME_DIRS = [
+    BASE_DIR / "data",
+    BASE_DIR / "data" / "audio",
+    BASE_DIR / "data" / "transcripts",
+    BASE_DIR / "data" / "logs",
+    BASE_DIR / "data" / "logs" / "adapters",
+    BASE_DIR / "certs",
+]
 
 
+def ensure_runtime_dirs() -> None:
+    for path in RUNTIME_DIRS:
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            # Keep startup resilient even if one directory is not writable.
+            print(f"[warn] cannot create runtime dir: {path} ({exc})")
+
+
+def setup_logging() -> logging.Logger:
+    logger = logging.getLogger("whisper_server")
+    if logger.handlers:
+        return logger
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s %(message)s"
+    )
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    except OSError:
+        logger.warning("file logging disabled (cannot create %s)", LOG_PATH)
+    return logger
+
+
+ensure_runtime_dirs()
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 sock = Sock(app)
 container = AppContainer(base_dir=BASE_DIR)
 container.file_persist.ensure_dirs()
+logger = setup_logging()
 transcribe_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="transcribe")
 jobs_lock = Lock()
 jobs: dict[str, dict[str, str]] = {}
@@ -56,7 +100,7 @@ def list_active_jobs() -> list[dict[str, str]]:
         active = [
             dict(job)
             for job in jobs.values()
-            if job["status"] in {"queued", "running"}
+            if job["status"] in {"queued", "running", "failed"}
         ]
     active.sort(key=lambda j: j["submitted_at"], reverse=False)
     return active
@@ -70,23 +114,30 @@ def run_transcription_job(job_id: str, payload: bytes, suffix: str) -> None:
         job["status"] = "running"
         job["started_at"] = utc_now()
         submitted_at = job.get("submitted_at", utc_now())
+    logger.info("pipeline.upload.start job_id=%s", job_id)
     try:
+        logger.info("pipeline.upload.transcribe.begin job_id=%s", job_id)
         item, _ = container.transcribe_use_case.from_bytes(payload, suffix, submitted_at=submitted_at)
+        logger.info("pipeline.upload.transcribe.end job_id=%s", job_id)
         with jobs_lock:
             job = jobs.get(job_id)
             if not job:
                 return
+            logger.info("pipeline.upload.persist.begin job_id=%s item_id=%s", job_id, item.id)
             job["status"] = "done"
             job["finished_at"] = utc_now()
             job["item_id"] = item.id
+            logger.info("pipeline.upload.persist.end job_id=%s item_id=%s", job_id, item.id)
+        logger.info("pipeline.upload.ok job_id=%s item_id=%s", job_id, item.id)
     except Exception as exc:
+        logger.error("pipeline.upload.ko job_id=%s error=%s see=data/logs/adapters/", job_id, exc)
         with jobs_lock:
             job = jobs.get(job_id)
             if not job:
                 return
             job["status"] = "failed"
             job["finished_at"] = utc_now()
-            job["error"] = str(exc)
+            job["error"] = f"{type(exc).__name__}: {exc}"
 
 
 def run_regenerate_job(job_id: str, item_id: str) -> None:
@@ -96,6 +147,7 @@ def run_regenerate_job(job_id: str, item_id: str) -> None:
             return
         job["status"] = "running"
         job["started_at"] = utc_now()
+    logger.info("pipeline.regenerate.start job_id=%s item_id=%s", job_id, item_id)
     try:
         success, result = container.regenerate_transcript_use_case.execute(item_id)
         with jobs_lock:
@@ -106,18 +158,21 @@ def run_regenerate_job(job_id: str, item_id: str) -> None:
                 job["status"] = "done"
                 job["finished_at"] = utc_now()
                 job["item_id"] = item_id
+                logger.info("pipeline.regenerate.ok job_id=%s item_id=%s", job_id, item_id)
             else:
                 job["status"] = "failed"
                 job["finished_at"] = utc_now()
                 job["error"] = result
+                logger.error("pipeline.regenerate.ko job_id=%s error=%s see=data/logs/adapters/", job_id, result)
     except Exception as exc:
+        logger.error("pipeline.regenerate.ko job_id=%s error=%s see=data/logs/adapters/", job_id, exc)
         with jobs_lock:
             job = jobs.get(job_id)
             if not job:
                 return
             job["status"] = "failed"
             job["finished_at"] = utc_now()
-            job["error"] = str(exc)
+            job["error"] = f"{type(exc).__name__}: {exc}"
 
 
 @app.route("/api/health", methods=["GET"])
@@ -161,6 +216,7 @@ def upload():
     payload = audio_file.read()
     suffix = Path(audio_file.filename).suffix.lower() or ".webm"
     job_id = uuid.uuid4().hex
+    logger.info("pipeline.upload.queued job_id=%s", job_id)
     with jobs_lock:
         jobs[job_id] = {
             "id": job_id,
@@ -289,13 +345,23 @@ def index():
 
 
 if __name__ == "__main__":
-    if not CERT_PATH.exists() or not KEY_PATH.exists():
-        raise SystemExit(
-            "Missing HTTPS certs. Create certs/local.pem and certs/local-key.pem."
+    logger.info("server_start base_dir=%s log_path=%s", BASE_DIR, LOG_PATH)
+    use_ssl = os.getenv("APP_SSL", "1").strip().lower() not in {"0", "false", "no"}
+    if use_ssl:
+        if not CERT_PATH.exists() or not KEY_PATH.exists():
+            raise SystemExit(
+                "Missing HTTPS certs. Create certs/local.pem and certs/local-key.pem "
+                "or start with APP_SSL=0."
+            )
+        app.run(
+            host="0.0.0.0",
+            port=8000,
+            debug=False,
+            ssl_context=(str(CERT_PATH), str(KEY_PATH)),
         )
-    app.run(
-        host="0.0.0.0",
-        port=8000,
-        debug=False,
-        ssl_context=(str(CERT_PATH), str(KEY_PATH)),
-    )
+    else:
+        app.run(
+            host="0.0.0.0",
+            port=8000,
+            debug=False,
+        )
