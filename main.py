@@ -1,12 +1,10 @@
 from pathlib import Path
 
-import torch
-import whisper
+from whisper_backend import BackendConfig, load_model, transcribe_text
 
 
 def main() -> int:
     audio_path = Path("sample3.mp3")
-    model_name = "turbo"
     language = "fr"
     task = "transcribe"
     out_path = None
@@ -14,18 +12,17 @@ def main() -> int:
     if not audio_path.exists():
         raise SystemExit(f"Audio file not found: {audio_path}")
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(device)
-    model = whisper.load_model(model_name, device=device)
+    model, backend_info = load_model(BackendConfig())
+    print(f"{backend_info['backend']} | {backend_info['device']} | {backend_info['compute_type']}")
 
-    result = model.transcribe(
+    text = transcribe_text(
+        model,
         str(audio_path),
         language=language,
         task=task,
-        fp16=(device == "cuda"),
+        temperature=0.0,
     )
 
-    text = result.get("text", "").strip()
     if out_path:
         Path(out_path).write_text(text + "\n", encoding="utf-8")
     else:

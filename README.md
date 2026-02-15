@@ -1,6 +1,6 @@
-# STT_OpenAI_WHISPER
+# STT_FASTER_WHISPER
 
-POC de transcription vocale avec OpenAI Whisper.
+POC de transcription vocale avec `faster-whisper` (plus rapide et plus leger sur CPU).
 
 Ce depot utilise Codex pour aider au developpement et aux iterations rapides.
 
@@ -14,6 +14,26 @@ Ce depot utilise Codex pour aider au developpement et aux iterations rapides.
 
 ```
 pip install -r requirements.txt
+```
+
+## Reglages perf (machines peu puissantes)
+
+Par defaut, le projet utilise un modele `large-v3` avec `int8_float32` sur CPU.
+
+Variables utiles:
+
+- `WHISPER_MODEL`: `tiny`, `base`, `small`, `medium`, `large-v3`
+- `WHISPER_DEVICE`: `cpu` ou `cuda` (par defaut: auto)
+- `WHISPER_COMPUTE_TYPE`: `int8`, `int8_float16`, `int8_float32`, `float16`, `float32` (par defaut: auto)
+- `WHISPER_CPU_THREADS`: nombre de threads CPU (0 = auto)
+
+Exemple (Windows PowerShell):
+
+```
+$env:WHISPER_MODEL="large-v3"
+$env:WHISPER_DEVICE="cpu"
+$env:WHISPER_COMPUTE_TYPE="int8"
+python server.py
 ```
 
 ## Usage

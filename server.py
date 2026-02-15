@@ -11,8 +11,7 @@ from typing import Any, Dict, List
 
 from flask import Flask, jsonify, request, send_file
 from flask_sock import Sock
-import torch
-import whisper
+from whisper_backend import BackendConfig, load_model, transcribe_text
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -24,7 +23,7 @@ CERT_DIR = BASE_DIR / "certs"
 CERT_PATH = CERT_DIR / "local.pem"
 KEY_PATH = CERT_DIR / "local-key.pem"
 
-MODEL_NAME = "turbo"
+MODEL_NAME = os.getenv("WHISPER_MODEL", "large-v3")
 LANGUAGE = "fr"
 TASK = "transcribe"
 
@@ -52,13 +51,8 @@ def ensure_dirs() -> None:
     TRANSCRIPT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def pick_device() -> str:
-    return "cuda" if torch.cuda.is_available() else "cpu"
-
-
-def load_model():
-    device = pick_device()
-    return whisper.load_model(MODEL_NAME, device=device), device
+def load_stt_model():
+    return load_model(BackendConfig(model_name=MODEL_NAME))
 
 
 def ffmpeg_exists() -> bool:
@@ -80,15 +74,14 @@ def convert_to_mp3(src_path: Path, dst_path: Path) -> bool:
         return False
 
 
-def transcribe_audio(model, device: str, audio_path: Path) -> str:
-    result = model.transcribe(
+def transcribe_audio(model, audio_path: Path) -> str:
+    return transcribe_text(
+        model,
         str(audio_path),
         language=LANGUAGE,
         task=TASK,
-        fp16=(device == "cuda"),
         temperature=0.0,
     )
-    return result.get("text", "").strip()
 
 
 def read_transcript(item: Dict[str, Any]) -> str:
@@ -103,12 +96,20 @@ def read_transcript(item: Dict[str, Any]) -> str:
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 sock = Sock(app)
-MODEL, DEVICE = load_model()
+MODEL, BACKEND_INFO = load_stt_model()
 
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "device": DEVICE, "model": MODEL_NAME})
+    return jsonify(
+        {
+            "status": "ok",
+            "backend": BACKEND_INFO["backend"],
+            "device": BACKEND_INFO["device"],
+            "compute_type": BACKEND_INFO["compute_type"],
+            "model": BACKEND_INFO["model"],
+        }
+    )
 
 
 @app.route("/api/items", methods=["GET"])
@@ -142,7 +143,7 @@ def upload():
     if convert_to_mp3(raw_path, mp3_path):
         audio_path = mp3_path
 
-    transcript = transcribe_audio(MODEL, DEVICE, audio_path)
+    transcript = transcribe_audio(MODEL, audio_path)
     transcript_path = TRANSCRIPT_DIR / f"{item_id}.txt"
     transcript_path.write_text(transcript + "\n", encoding="utf-8")
 
@@ -173,9 +174,9 @@ def get_audio(item_id: str):
     return jsonify({"error": "item not found"}), 404
 
 
-def transcribe_buffer(model, device: str, buffer_bytes: bytes, temp_path: Path) -> str:
+def transcribe_buffer(model, buffer_bytes: bytes, temp_path: Path) -> str:
     temp_path.write_bytes(buffer_bytes)
-    return transcribe_audio(model, device, temp_path)
+    return transcribe_audio(model, temp_path)
 
 
 @sock.route("/ws")
@@ -218,7 +219,7 @@ def stream(ws):
         if convert_to_mp3(raw_path, mp3_path):
             audio_path = mp3_path
 
-        transcript = transcribe_audio(MODEL, DEVICE, audio_path)
+        transcript = transcribe_audio(MODEL, audio_path)
         transcript_path = TRANSCRIPT_DIR / f"{item_id}.txt"
         transcript_path.write_text(transcript + "\n", encoding="utf-8")
 

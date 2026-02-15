@@ -1,17 +1,17 @@
 import queue
 import time
 from dataclasses import dataclass
-from typing import Tuple
+import os
 
 import numpy as np
 import sounddevice as sd
-import torch
-import whisper
+
+from whisper_backend import BackendConfig, load_model, transcribe_text
 
 
 @dataclass
 class Config:
-    model_name: str = "turbo"
+    model_name: str = os.getenv("WHISPER_MODEL", "large-v3")
     language: str = "fr"
     task: str = "transcribe"
     out_path: str = "live_transcript.txt"
@@ -23,27 +23,18 @@ class Config:
     max_overlap_check: int = 120
 
 
-def pick_device() -> Tuple[str, bool]:
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    return device, device == "cuda"
-
-
-def load_model(model_name: str, device: str):
-    return whisper.load_model(model_name, device=device)
-
-
-def transcribe_chunk(model, audio_chunk: np.ndarray, config: Config, fp16: bool) -> str:
-    result = model.transcribe(
+def transcribe_chunk(model, audio_chunk: np.ndarray, config: Config) -> str:
+    return transcribe_text(
+        model,
         audio_chunk,
         language=config.language,
         task=config.task,
-        fp16=fp16,
         temperature=0.0,
+        vad_filter=False,
     )
-    return result.get("text", "").strip()
 
 
-def dedupe_output(history: str, text: str, config: Config) -> Tuple[str, str]:
+def dedupe_output(history: str, text: str, config: Config):
     max_overlap = 0
     history = history[-config.history_limit :]
     max_check = min(len(history), len(text), config.max_overlap_check)
@@ -76,8 +67,8 @@ def main() -> int:
     stride_samples = int(config.stride_seconds * config.sample_rate)
     window_samples = int(config.window_seconds * config.sample_rate)
 
-    device, fp16 = pick_device()
-    model = load_model(config.model_name, device)
+    model, backend_info = load_model(BackendConfig(model_name=config.model_name))
+    print(f"Using {backend_info['backend']} | {backend_info['model']} | {backend_info['device']} | {backend_info['compute_type']}")
 
     q: queue.Queue[np.ndarray] = queue.Queue()
     full_audio = np.zeros((0,), dtype=np.float32)
@@ -112,7 +103,7 @@ def main() -> int:
                     start = max(0, end - window_samples)
                     audio_chunk = full_audio[start:end]
 
-                    text = transcribe_chunk(model, audio_chunk, config, fp16)
+                    text = transcribe_chunk(model, audio_chunk, config)
                     if text:
                         new_part, history = dedupe_output(history, text, config)
                         if new_part:
@@ -132,7 +123,7 @@ def main() -> int:
             print("\nStopped. Finalizing transcription...")
             full_audio = drain_queue(q, full_audio)
             if full_audio.size > 0:
-                final_text = transcribe_chunk(model, full_audio, config, fp16)
+                final_text = transcribe_chunk(model, full_audio, config)
                 if final_text:
                     print("\nFull transcript:")
                     print(final_text)
