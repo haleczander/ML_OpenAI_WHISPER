@@ -1,0 +1,50 @@
+name: Build Portable ZIP
+
+on:
+  push:
+    branches:
+      - main
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-portable:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download ffmpeg essentials
+        shell: pwsh
+        run: |
+          $url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+          $zip = Join-Path $env:RUNNER_TEMP "ffmpeg.zip"
+          $extract = Join-Path $env:RUNNER_TEMP "ffmpeg"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+          $ffmpegRoot = Get-ChildItem -Path $extract -Directory | Select-Object -First 1
+          if (-not $ffmpegRoot) { throw "ffmpeg archive extraction failed" }
+          "FFMPEG_SOURCE=$($ffmpegRoot.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build portable zip
+        shell: pwsh
+        run: .\deploy\package-portable.ps1 -OutputZip "dictee_courriels.zip" -FfmpegSource "$env:FFMPEG_SOURCE"
+
+      - name: Upload CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dictee_courriels
+          path: dictee_courriels.zip
+
+      - name: Publish latest release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: portable-latest
+          name: Portable Latest
+          target_commitish: ${{ github.sha }}
+          overwrite_files: true
+          files: dictee_courriels.zip
