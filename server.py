@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from flask import Flask, jsonify, request, send_file
+from flask_sock import Sock
 import torch
 import whisper
 
@@ -101,6 +102,7 @@ def read_transcript(item: Dict[str, Any]) -> str:
 
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
+sock = Sock(app)
 MODEL, DEVICE = load_model()
 
 
@@ -169,6 +171,69 @@ def get_audio(item_id: str):
                 return send_file(audio_path, as_attachment=False)
             return jsonify({"error": "audio not found"}), 404
     return jsonify({"error": "item not found"}), 404
+
+
+def transcribe_buffer(model, device: str, buffer_bytes: bytes, temp_path: Path) -> str:
+    temp_path.write_bytes(buffer_bytes)
+    return transcribe_audio(model, device, temp_path)
+
+
+@sock.route("/ws")
+def stream(ws):
+    if not ffmpeg_exists():
+        ws.send(json.dumps({"type": "error", "message": "ffmpeg_missing"}))
+        return
+
+    session_id = uuid.uuid4().hex
+    temp_path = DATA_DIR / f"stream_{session_id}.webm"
+    buffer_bytes = bytearray()
+    ws.send(json.dumps({"type": "ready"}))
+
+    while True:
+        message = ws.receive()
+        if message is None:
+            break
+
+        if isinstance(message, str):
+            try:
+                payload = json.loads(message)
+            except json.JSONDecodeError:
+                continue
+            if payload.get("type") == "stop":
+                break
+            continue
+
+        if isinstance(message, bytes):
+            buffer_bytes.extend(message)
+            continue
+
+    if buffer_bytes:
+        ensure_dirs()
+        item_id = uuid.uuid4().hex
+        raw_path = AUDIO_DIR / f"{item_id}.webm"
+        raw_path.write_bytes(buffer_bytes)
+
+        audio_path = raw_path
+        mp3_path = AUDIO_DIR / f"{item_id}.mp3"
+        if convert_to_mp3(raw_path, mp3_path):
+            audio_path = mp3_path
+
+        transcript = transcribe_audio(MODEL, DEVICE, audio_path)
+        transcript_path = TRANSCRIPT_DIR / f"{item_id}.txt"
+        transcript_path.write_text(transcript + "\n", encoding="utf-8")
+
+        item = {
+            "id": item_id,
+            "created_at": utc_now(),
+            "audio_path": str(audio_path.relative_to(BASE_DIR)),
+            "audio_url": f"/audio/{item_id}",
+            "transcript_path": str(transcript_path.relative_to(BASE_DIR)),
+        }
+        items = load_items()
+        items.append(item)
+        save_items(items)
+
+        ws.send(json.dumps({"type": "final", "item": item, "transcript": transcript}))
 
 
 @app.route("/api/items/<item_id>", methods=["DELETE"])

@@ -3,3 +3,4 @@ torch
 numpy
 sounddevice
 flask
+flask-sock

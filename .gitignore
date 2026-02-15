@@ -1,3 +1,10 @@
 .venv/
 certs/
+__pycache__/
+build/
+dist/
+*.spec
 data/
+certs/
+data/
+sample*

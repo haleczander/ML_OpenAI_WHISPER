@@ -5,6 +5,7 @@ const startBtn = document.getElementById("startBtn");
 const stopBtn = document.getElementById("stopBtn");
 const timer = document.getElementById("timer");
 const liveState = document.getElementById("liveState");
+const liveTranscript = document.getElementById("liveTranscript");
 const itemsContainer = document.getElementById("items");
 const fileInput = document.getElementById("fileInput");
 const uploadBtn = document.getElementById("uploadBtn");
@@ -13,6 +14,9 @@ let mediaRecorder = null;
 let chunks = [];
 let timerInterval = null;
 let startTime = null;
+let ws = null;
+let streamingReady = false;
+let busy = false;
 
 function formatTime(seconds) {
   const minutes = String(Math.floor(seconds / 60)).padStart(2, "0");
@@ -22,6 +26,10 @@ function formatTime(seconds) {
 
 function setLiveState(text) {
   liveState.textContent = text;
+}
+
+function setLiveTranscript(text) {
+  liveTranscript.textContent = text || "En attente de transcription...";
 }
 
 async function checkHealth() {
@@ -91,6 +99,38 @@ async function uploadBlob(blob) {
   await fetchItems();
 }
 
+function openWebSocket() {
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
+  ws.binaryType = "arraybuffer";
+  streamingReady = false;
+  ws.onmessage = (event) => {
+    let payload = null;
+    try {
+      payload = JSON.parse(event.data);
+    } catch (err) {
+      return;
+    }
+    if (payload.type === "ready") {
+      setLiveState("Streaming actif.");
+      streamingReady = true;
+      return;
+    }
+    if (payload.type === "error") {
+      setLiveState("Erreur serveur (ffmpeg manquant).");
+      return;
+    }
+    if (payload.type === "final") {
+      setLiveTranscript(payload.transcript || "");
+      fetchItems();
+    }
+  };
+  ws.onerror = () => {
+    setLiveState("WebSocket indisponible.");
+    streamingReady = false;
+  };
+}
+
 function startTimer() {
   startTime = Date.now();
   timerInterval = setInterval(() => {
@@ -105,23 +145,46 @@ function stopTimer() {
   timer.textContent = "00:00";
 }
 
+function setBusy(state) {
+  busy = state;
+  startBtn.disabled = state;
+  uploadBtn.disabled = state;
+  fileInput.disabled = state;
+  stopBtn.disabled = !state;
+}
+
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  openWebSocket();
   chunks = [];
+  setLiveTranscript("");
   mediaRecorder = new MediaRecorder(stream);
   mediaRecorder.ondataavailable = (event) => {
     if (event.data.size > 0) {
       chunks.push(event.data);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        event.data.arrayBuffer().then((buffer) => {
+          ws.send(buffer);
+        });
+      }
     }
   };
   mediaRecorder.onstop = async () => {
     const blob = new Blob(chunks, { type: "audio/webm" });
-    await uploadBlob(blob);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "stop" }));
+      ws.close();
+    }
+    setLiveState("Transmission en cours...");
+    if (!streamingReady) {
+      await uploadBlob(blob);
+    }
+    setBusy(false);
+    setLiveState("Pret.");
   };
-  mediaRecorder.start();
-  startBtn.disabled = true;
-  stopBtn.disabled = false;
-  setLiveState("Enregistrement en cours...");
+  mediaRecorder.start(500);
+  setBusy(true);
+  setLiveState("Transmission en cours...");
   startTimer();
 }
 
@@ -130,8 +193,6 @@ function stopRecording() {
     mediaRecorder.stop();
     mediaRecorder.stream.getTracks().forEach((track) => track.stop());
   }
-  startBtn.disabled = false;
-  stopBtn.disabled = true;
   stopTimer();
 }
 
