@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 from pathlib import Path
 
+from src.adapters.logging_utils import get_adapter_logger
 from src.application.ports import FilePersistPort, TextPostProcessorPort, TranscribePort
 
 
@@ -21,10 +21,14 @@ class TranscriptionService:
         self._file_persist = file_persist
         self._transcriber = transcriber
         self._text_post_processor = text_post_processor
+        self._logger = get_adapter_logger("transcription_service")
 
     def transcribe_audio(self, audio_path: Path) -> tuple[str, str]:
+        self._logger.info("transcribe_audio.start audio_path=%s", audio_path)
         raw_text = self._transcriber.transcribe(audio_path)
+        self._logger.info("transcribe_audio.raw_ok audio_path=%s raw_len=%s", audio_path, len(raw_text))
         post_text = self._text_post_processor.process(raw_text)
+        self._logger.info("transcribe_audio.post_ok audio_path=%s post_len=%s", audio_path, len(post_text))
         return raw_text, post_text
 
     @classmethod
@@ -36,14 +40,16 @@ class TranscriptionService:
             f"{post_text.strip()}\n"
         )
 
-    @staticmethod
-    def probe_audio_duration_seconds(audio_path: Path) -> float:
-        if shutil.which("ffprobe") is None:
+    def probe_audio_duration_seconds(self, audio_path: Path) -> float:
+        project_root = Path(__file__).resolve().parents[3]
+        ffprobe_exe = project_root / "vendor" / "ffmpeg" / "bin" / "ffprobe.exe"
+        if not ffprobe_exe.exists():
+            self._logger.info("probe_audio_duration.skip reason=missing_ffprobe path=%s", ffprobe_exe)
             return 0.0
         try:
             output = subprocess.check_output(
                 [
-                    "ffprobe",
+                    str(ffprobe_exe),
                     "-v",
                     "quiet",
                     "-print_format",
@@ -57,4 +63,5 @@ class TranscriptionService:
             duration = payload.get("format", {}).get("duration", 0.0)
             return float(duration)
         except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError, TypeError):
+            self._logger.exception("probe_audio_duration.failure audio_path=%s", audio_path)
             return 0.0

@@ -4,20 +4,22 @@ POC de transcription vocale avec OpenAI Whisper.
 
 Ce depot utilise Codex pour aider au developpement et aux iterations rapides.
 
+## Telechargement direct
+
+- ZIP portable (latest): https://github.com/haleczander/ML_OpenAI_WHISPER/releases/latest/download/dictee_courriels.zip
+
 ## Architecture (Clean)
 
 - `src/domain`: entites metier (`Item`).
 - `src/application`: ports + use cases (orchestration metier) + container d'injection.
 - `src/adapters/persistence`: persistence JSON des items.
-- `src/adapters/storage`: persistence fichiers sur le filesystem + conversion mp3 via ffmpeg.
-- `src/adapters/transcription`: implementation Whisper du port de transcription.
+- `src/adapters/storage`: persistence fichiers sur le filesystem.
+- `src/adapters/transcription`: implementation Whisper du port de transcription (normalisation audio mono/16k avant inference).
 - `src/adapters/text`: post-processing texte ultra-leger par regex (instructions de dictee -> ponctuation/mise en page).
 - `server.py`: API Flask/WebSocket qui expose les use cases (`upload/transcribe`, `get`, `list`, `delete`).
 
 ## Scripts
 
-- `main.py`: transcription batch d'un fichier audio.
-- `live_transcribe.py`: transcription en flux tendu depuis le micro.
 - `server.py`: serveur local + front pour dictee.
 
 ## Installation
@@ -26,11 +28,45 @@ Ce depot utilise Codex pour aider au developpement et aux iterations rapides.
 pip install -r requirements.txt
 ```
 
-## Usage
+## Mode portable Windows
 
-```bash
-python main.py
-python live_transcribe.py
+Prerequis:
+- Python 3.10+ installe et accessible via `py` ou `python`
+- ffmpeg: soit installe dans le `PATH`, soit embarque dans `vendor/ffmpeg/bin/ffmpeg.exe`
+- Certificats HTTPS: soit deja presents dans `certs/`, soit embarques dans `deploy/certs/local.pem` et `deploy/certs/local-key.pem`
+
+Installation:
+
+```powershell
+.\deploy\install.ps1
+```
+
+Ou en double-clic Windows:
+
+```bat
+install.bat
+```
+
+Packaging "portable" (sans installation systeme ffmpeg/certs):
+- Deposer `ffmpeg.exe` dans `vendor/ffmpeg/bin/ffmpeg.exe`
+- Deposer les certs dans `deploy/certs/local.pem` et `deploy/certs/local-key.pem`
+- Lancer `.\deploy\install.ps1` (copie auto des certs vers `certs/`)
+
+Lancement:
+
+```powershell
+# HTTP (desktop simple)
+.\deploy\run.ps1
+
+# HTTPS (mobile/micro navigateur)
+.\deploy\run.ps1 -Https
+```
+
+Ou en double-clic Windows:
+
+```bat
+run.bat
+run.bat http
 ```
 
 ## App locale (serveur + front)

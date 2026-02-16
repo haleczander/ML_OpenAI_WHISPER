@@ -2,12 +2,20 @@
 
 import re
 
+from src.adapters.logging_utils import get_adapter_logger
+
 
 class InstructionTextPostProcessor:
     A_TOKEN = r"(?:a|\u00e0|\u00c3\u00a0|\u00c3\u0192\u00c2\u00a0)"
 
+    def __init__(self) -> None:
+        self._logger = get_adapter_logger("instruction_text_post_processor")
+        self._logger.info("init.success")
+
     def process(self, text: str) -> str:
+        self._logger.info("process.start chars=%s", len(text or ""))
         if not text:
+            self._logger.info("process.success chars=0 empty=true")
             return ""
 
         formatted = self._normalize_mojibake(text)
@@ -90,6 +98,7 @@ class InstructionTextPostProcessor:
         formatted = re.sub(r"[ \t]*\n[ \t]*", "\n", formatted)
         formatted = re.sub(r"\n{3,}", "\n\n", formatted)
         formatted = self._capitalize_sentences(formatted.strip())
+        self._logger.info("process.success chars=%s has_markers=%s", len(formatted), self._has_dictation_markers(text))
         return formatted
 
     @classmethod

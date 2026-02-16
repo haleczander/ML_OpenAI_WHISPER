@@ -1,77 +1,80 @@
 from __future__ import annotations
 
-import shutil
-import subprocess
 from pathlib import Path
+
+from src.adapters.logging_utils import get_adapter_logger
 
 
 class LocalFilePersistAdapter:
     def __init__(self, base_dir: Path) -> None:
+        self._logger = get_adapter_logger("local_file_persist_adapter")
         self._base_dir = base_dir
         self._data_dir = self._base_dir / "data"
         self._audio_dir = self._data_dir / "audio"
         self._transcript_dir = self._data_dir / "transcripts"
+        self._logger.info("init.success base_dir=%s", base_dir)
 
     def ensure_dirs(self) -> None:
-        self._data_dir.mkdir(parents=True, exist_ok=True)
-        self._audio_dir.mkdir(parents=True, exist_ok=True)
-        self._transcript_dir.mkdir(parents=True, exist_ok=True)
-
-    def save_uploaded_file(self, file_obj, relative_path: str) -> None:
-        target = self.resolve(relative_path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        file_obj.save(target)
+        self._logger.info("ensure_dirs.start")
+        try:
+            self._data_dir.mkdir(parents=True, exist_ok=True)
+            self._audio_dir.mkdir(parents=True, exist_ok=True)
+            self._transcript_dir.mkdir(parents=True, exist_ok=True)
+            self._logger.info("ensure_dirs.success")
+        except Exception as exc:
+            self._logger.exception("ensure_dirs.failure error=%s", exc)
+            raise
 
     def save_bytes(self, payload: bytes, relative_path: str) -> None:
-        target = self.resolve(relative_path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(payload)
-
-    def convert_to_mp3_if_possible(self, src_relative_path: str) -> str:
-        if not self._ffmpeg_exists():
-            return src_relative_path
-
-        src_path = self.resolve(src_relative_path)
-        mp3_relative = f"data/audio/{src_path.stem}.mp3"
-        mp3_path = self.resolve(mp3_relative)
-
-        if self._convert_to_mp3(src_path, mp3_path):
-            return mp3_relative
-        return src_relative_path
+        self._logger.info("save_bytes.start relative_path=%s bytes=%s", relative_path, len(payload))
+        try:
+            target = self.resolve(relative_path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(payload)
+            self._logger.info("save_bytes.success relative_path=%s", relative_path)
+        except Exception as exc:
+            self._logger.exception("save_bytes.failure relative_path=%s error=%s", relative_path, exc)
+            raise
 
     def write_text(self, relative_path: str, content: str) -> None:
-        target = self.resolve(relative_path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        self._logger.info("write_text.start relative_path=%s chars=%s", relative_path, len(content))
+        try:
+            target = self.resolve(relative_path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            self._logger.info("write_text.success relative_path=%s", relative_path)
+        except Exception as exc:
+            self._logger.exception("write_text.failure relative_path=%s error=%s", relative_path, exc)
+            raise
 
     def read_text(self, relative_path: str) -> str:
-        target = self.resolve(relative_path)
-        if not target.exists():
-            return ""
-        return target.read_text(encoding="utf-8")
+        self._logger.info("read_text.start relative_path=%s", relative_path)
+        try:
+            target = self.resolve(relative_path)
+            if not target.exists():
+                self._logger.info("read_text.success relative_path=%s chars=0 missing=true", relative_path)
+                return ""
+            content = target.read_text(encoding="utf-8")
+            self._logger.info("read_text.success relative_path=%s chars=%s", relative_path, len(content))
+            return content
+        except Exception as exc:
+            self._logger.exception("read_text.failure relative_path=%s error=%s", relative_path, exc)
+            raise
 
     def delete_file(self, relative_path: str) -> None:
-        target = self.resolve(relative_path)
-        if target.exists():
-            target.unlink()
+        self._logger.info("delete_file.start relative_path=%s", relative_path)
+        try:
+            target = self.resolve(relative_path)
+            existed_before = target.exists()
+            if target.exists():
+                target.unlink()
+            self._logger.info("delete_file.success relative_path=%s existed=%s", relative_path, existed_before)
+        except Exception as exc:
+            self._logger.exception("delete_file.failure relative_path=%s error=%s", relative_path, exc)
+            raise
 
     def resolve(self, relative_path: str) -> Path:
         normalized = relative_path.replace("\\", "/")
-        return self._base_dir / Path(normalized)
-
-    @staticmethod
-    def _ffmpeg_exists() -> bool:
-        return shutil.which("ffmpeg") is not None
-
-    @staticmethod
-    def _convert_to_mp3(src_path: Path, dst_path: Path) -> bool:
-        try:
-            subprocess.run(
-                ["ffmpeg", "-y", "-i", str(src_path), str(dst_path)],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            return True
-        except subprocess.CalledProcessError:
-            return False
+        resolved = self._base_dir / Path(normalized)
+        self._logger.info("resolve.success relative_path=%s resolved=%s", relative_path, resolved)
+        return resolved
