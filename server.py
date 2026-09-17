@@ -30,6 +30,7 @@ from src.app_config import AppConfig
 from src.application.container import AppContainer
 from src.runtime_paths import RuntimePaths
 from src.single_instance import SingleInstanceLock
+from src.update_service import DEFAULT_UPDATE_REPOSITORY, UpdateService
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -107,6 +108,15 @@ logger = setup_logging()
 transcribe_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="transcribe")
 jobs_lock = Lock()
 jobs: dict[str, dict[str, str]] = {}
+updates_enabled = bool(getattr(sys, "frozen", False)) and os.getenv(
+    "APP_UPDATE_ENABLED", "1"
+).strip().lower() not in {"0", "false", "no", "off"}
+update_service = UpdateService(
+    enabled=updates_enabled,
+    repository_url=os.getenv("APP_UPDATE_REPOSITORY", DEFAULT_UPDATE_REPOSITORY),
+)
+if updates_enabled:
+    update_service.check_async()
 
 
 def utc_now() -> str:
@@ -241,6 +251,29 @@ def health():
             "port": APP_CONFIG.port,
         }
     )
+
+
+@app.route("/api/update", methods=["GET"])
+def get_update_status():
+    return jsonify(update_service.snapshot())
+
+
+@app.route("/api/update/check", methods=["POST"])
+def check_for_update():
+    worker = update_service.check_async()
+    return jsonify(update_service.snapshot()), 202 if worker else 409
+
+
+@app.route("/api/update/download", methods=["POST"])
+def download_update():
+    worker = update_service.download_async()
+    return jsonify(update_service.snapshot()), 202 if worker else 409
+
+
+@app.route("/api/update/apply", methods=["POST"])
+def apply_update():
+    worker = update_service.apply_async()
+    return jsonify(update_service.snapshot()), 202 if worker else 409
 
 
 @app.route("/api/vocabulary", methods=["GET"])
