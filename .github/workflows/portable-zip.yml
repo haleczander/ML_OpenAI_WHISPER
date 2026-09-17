@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download ffmpeg essentials
         shell: pwsh
@@ -66,13 +66,13 @@ jobs:
         run: .\deploy\package-portable.ps1 -OutputZip "dictee_courriels.zip" -FfmpegSource "$env:FFMPEG_SOURCE"
 
       - name: Upload CI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dictee_courriels
           path: dictee_courriels.zip
 
       - name: Publish latest release asset
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: portable-latest
           name: Portable Latest
