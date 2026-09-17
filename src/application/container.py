@@ -15,6 +15,7 @@ from src.application.use_cases.items import (
     ListItemsUseCase,
 )
 from src.application.use_cases.regenerate import RegenerateTranscriptUseCase
+from src.application.use_cases.update_transcript import UpdateTranscriptUseCase
 from src.application.use_cases.transcribe import TranscribeUseCase
 
 
@@ -47,5 +48,8 @@ class AppContainer:
             repository=self.repository,
             file_persist=self.file_persist,
             transcription_service=self.transcription_service,
+        )
+        self.update_transcript_use_case = UpdateTranscriptUseCase(
+            repository=self.repository, file_persist=self.file_persist
         )
         self.delete_item_use_case = DeleteItemUseCase(repository=self.repository, file_persist=self.file_persist)

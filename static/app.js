@@ -21,6 +21,8 @@ let itemsSocket = null;
 let itemsSocketRetry = null;
 let itemsState = {};
 let jobsState = {};
+let activeEditor = null;
+const EDIT_SAVE_INTERVAL_MS = 600;
 const ITEMS_PAGE_SIZE = 3;
 let visibleItemsCount = ITEMS_PAGE_SIZE;
 const ICONS = {
@@ -134,16 +136,41 @@ function renderItems(items) {
         </div>
       </div>
       <audio controls preload="none" data-audio-id="${item.id}" style="display:none;"></audio>
-      <div class="transcript transcript-collapsed"></div>
+      <div class="transcript-wrap"></div>
     `;
-    const transcriptDiv = card.querySelector(".transcript");
     const transcriptText = item.transcript || "Transcription en cours...";
-    transcriptDiv.textContent = transcriptText;
     const isLongTranscript = transcriptText.length > 260;
-    if (isLongTranscript) {
-      transcriptDiv.classList.add("transcript-clickable");
-      transcriptDiv.title = "Cliquer pour voir plus/moins";
-      transcriptDiv.dataset.expanded = "false";
+    const transcriptWrap = card.querySelector(".transcript-wrap");
+    if (activeEditor?.id === item.id) {
+      const editor = document.createElement("textarea");
+      editor.className = "transcript-editor";
+      editor.value = activeEditor.text;
+      transcriptWrap.appendChild(editor);
+      const status = document.createElement("div");
+      status.className = "transcript-status";
+      status.textContent = activeEditor.status;
+      transcriptWrap.appendChild(status);
+      attachEditor(editor, status);
+    } else {
+      const transcriptDiv = document.createElement("div");
+      transcriptDiv.className = `transcript ${isLongTranscript ? "transcript-collapsed" : ""}`;
+      transcriptDiv.textContent = transcriptText;
+      transcriptDiv.title = "Cliquer pour modifier";
+      transcriptDiv.addEventListener("click", () => beginEditing(item));
+      transcriptWrap.appendChild(transcriptDiv);
+      if (isLongTranscript) {
+        const more = document.createElement("button");
+        more.className = "transcript-more";
+        more.type = "button";
+        more.textContent = "Voir plus";
+        more.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const expanded = transcriptDiv.classList.toggle("transcript-expanded");
+          transcriptDiv.classList.toggle("transcript-collapsed", !expanded);
+          more.textContent = expanded ? "Voir moins" : "Voir plus";
+        });
+        transcriptWrap.appendChild(more);
+      }
     }
     itemsContainer.appendChild(card);
   });
@@ -213,6 +240,9 @@ function renderItems(items) {
         return;
       }
       const id = trigger.dataset.id;
+      if (itemsState[id]?.manually_edited && !confirm("Cette régénération remplacera les corrections manuelles. Continuer ?")) {
+        return;
+      }
       trigger.disabled = true;
       setLiveState("Regeneration du transcript en cours...");
       try {
@@ -231,16 +261,6 @@ function renderItems(items) {
       } finally {
         trigger.disabled = false;
       }
-    });
-  });
-
-  document.querySelectorAll(".transcript-clickable").forEach((node) => {
-    node.addEventListener("click", (event) => {
-      const transcript = event.currentTarget;
-      const expanded = transcript.dataset.expanded === "true";
-      transcript.dataset.expanded = expanded ? "false" : "true";
-      transcript.classList.toggle("transcript-expanded", !expanded);
-      transcript.classList.toggle("transcript-collapsed", expanded);
     });
   });
 
@@ -274,6 +294,88 @@ function renderJobs(jobs) {
     `;
     jobsContainer.appendChild(node);
   });
+}
+
+function beginEditing(item) {
+  activeEditor = { id: item.id, text: item.transcript || "", original: item.transcript || "", revision: item.revision || 1, dirty: false, saving: false, timer: null, status: "Modification" };
+  renderItems(sortItems(Object.values(itemsState)));
+  const editor = itemsContainer.querySelector(".transcript-editor");
+  if (editor) editor.focus();
+}
+
+function attachEditor(editor, statusNode) {
+  editor.addEventListener("input", () => {
+    if (!activeEditor) return;
+    activeEditor.text = editor.value;
+    activeEditor.dirty = activeEditor.text !== activeEditor.original;
+    activeEditor.status = activeEditor.dirty ? "Modifications…" : "Enregistré";
+    statusNode.textContent = activeEditor.status;
+    if (activeEditor.dirty) startAutosaveInterval();
+  });
+  editor.addEventListener("blur", () => activeEditor?.dirty ? saveActiveEditor(true) : closeEditor());
+  editor.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { event.preventDefault(); activeEditor.text = activeEditor.original; activeEditor.dirty = false; closeEditor(); }
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); saveActiveEditor(true); }
+  });
+}
+
+function closeEditor() {
+  if (!activeEditor || activeEditor.saving) return;
+  clearInterval(activeEditor.timer);
+  activeEditor = null;
+  renderItems(sortItems(Object.values(itemsState)));
+}
+
+function startAutosaveInterval() {
+  if (!activeEditor || activeEditor.timer) return;
+  activeEditor.timer = setInterval(() => saveActiveEditor(), EDIT_SAVE_INTERVAL_MS);
+}
+
+async function saveActiveEditor(closeAfterSave = false, force = false) {
+  if (!activeEditor || activeEditor.saving || !activeEditor.dirty) { if (closeAfterSave) closeEditor(); return; }
+  const draft = activeEditor;
+  const textToSave = draft.text;
+  draft.saving = true;
+  draft.status = "Enregistrement…";
+  try {
+    const response = await fetch(`/api/items/${draft.id}/transcript`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ transcript: textToSave, revision: draft.revision, force }) });
+    const payload = await response.json();
+    if (response.status === 409) {
+      const useRemote = confirm("Une version plus récente existe. OK : charger cette version. Annuler : conserver votre texte et remplacer la version distante.");
+      if (useRemote) {
+        draft.text = payload.item.transcript; draft.original = payload.item.transcript; draft.revision = payload.item.revision; draft.dirty = false; draft.status = "Version distante chargée";
+      } else {
+        draft.revision = payload.item.revision; draft.dirty = true; draft.saving = false;
+        return saveActiveEditor(closeAfterSave, true);
+      }
+    } else if (!response.ok) {
+      throw new Error("save failed");
+    } else {
+      itemsState[payload.id] = { ...itemsState[payload.id], ...payload };
+      draft.original = payload.transcript; draft.revision = payload.revision;
+      draft.dirty = draft.text !== draft.original;
+      draft.status = draft.dirty ? "Modifications…" : "Enregistré";
+    }
+  } catch (err) {
+    draft.status = "Erreur d’enregistrement — modifiez le texte pour réessayer.";
+    clearInterval(draft.timer);
+    draft.timer = null;
+  } finally {
+    draft.saving = false;
+    if (activeEditor === draft) {
+      if (closeAfterSave && !draft.dirty) closeEditor();
+      else {
+        // Keep the existing textarea node: rebuilding the card would drop focus
+        // after every debounced save.
+        const status = itemsContainer.querySelector(".transcript-status");
+        if (status) status.textContent = draft.status;
+        if (!draft.dirty) {
+          clearInterval(draft.timer);
+          draft.timer = null;
+        }
+      }
+    }
+  }
 }
 
 function sortItems(items) {
@@ -316,12 +418,18 @@ function applyOps(ops) {
       if (op.action === "upsert" && op.item) {
         const isNewItem = !itemsState[op.item.id];
         itemsState[op.item.id] = op.item;
+        if (activeEditor?.id === op.item.id && activeEditor.dirty && op.item.revision > activeEditor.revision) {
+          activeEditor.status = "Une version plus récente est disponible.";
+          const status = itemsContainer.querySelector(".transcript-status");
+          if (status) status.textContent = activeEditor.status;
+        }
         if (isNewItem && op.notify) {
           incomingItems.push(op.item);
         }
       }
       if (op.action === "delete" && op.id) {
         delete itemsState[op.id];
+        if (activeEditor?.id === op.id) activeEditor = null;
       }
       return;
     }
@@ -334,7 +442,8 @@ function applyOps(ops) {
       }
     }
   });
-  renderItems(sortItems(Object.values(itemsState)));
+  // Do not replace a focused textarea when another socket event arrives.
+  if (!activeEditor) renderItems(sortItems(Object.values(itemsState)));
   renderJobs(sortJobs(Object.values(jobsState)));
   incomingItems.forEach(notifyNewItem);
 }

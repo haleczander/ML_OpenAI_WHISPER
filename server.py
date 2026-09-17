@@ -284,6 +284,28 @@ def download_transcript(item_id: str):
     )
 
 
+@app.route("/api/items/<item_id>/transcript", methods=["PUT"])
+def update_item_transcript(item_id: str):
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or not isinstance(payload.get("transcript"), str):
+        return jsonify({"error": "transcript must be a string"}), 400
+    if len(payload["transcript"]) > 100_000:
+        return jsonify({"error": "transcript is too long"}), 400
+    try:
+        revision = int(payload.get("revision"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "revision must be an integer"}), 400
+
+    status, item = container.update_transcript_use_case.execute(
+        item_id, payload["transcript"], revision, bool(payload.get("force", False))
+    )
+    if status == "not_found":
+        return jsonify({"error": "item not found"}), 404
+    if status == "conflict":
+        return jsonify({"error": "revision conflict", "item": item}), 409
+    return jsonify(item)
+
+
 @app.route("/api/items/<item_id>/regenerate", methods=["POST"])
 def regenerate_item_transcript(item_id: str):
     item = container.get_item_use_case.execute(item_id)

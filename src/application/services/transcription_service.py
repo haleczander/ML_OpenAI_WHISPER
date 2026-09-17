@@ -40,6 +40,14 @@ class TranscriptionService:
             f"{post_text.strip()}\n"
         )
 
+    @classmethod
+    def replace_post_processed(cls, content: str, post_text: str) -> str:
+        """Keep Whisper's raw result intact while replacing the editable section."""
+        raw_part = content.split(cls.POST_HEADER, 1)[0].rstrip()
+        if not raw_part:
+            raw_part = cls.RAW_HEADER
+        return f"{raw_part}\n\n{cls.POST_HEADER}\n{post_text.strip()}\n"
+
     def probe_audio_duration_seconds(self, audio_path: Path) -> float:
         project_root = Path(__file__).resolve().parents[3]
         ffprobe_exe = project_root / "vendor" / "ffmpeg" / "bin" / "ffprobe.exe"

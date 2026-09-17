@@ -14,6 +14,9 @@ class Item:
     transcribe_started_at: str = ""
     transcribe_finished_at: str = ""
     audio_duration_seconds: float = 0.0
+    revision: int = 1
+    updated_at: str = ""
+    manually_edited: bool = False
 
     @property
     def audio_url(self) -> str:
@@ -30,6 +33,9 @@ class Item:
             "transcribe_started_at": self.transcribe_started_at,
             "transcribe_finished_at": self.transcribe_finished_at,
             "audio_duration_seconds": self.audio_duration_seconds,
+            "revision": self.revision,
+            "updated_at": self.updated_at,
+            "manually_edited": self.manually_edited,
         }
 
     @staticmethod
@@ -43,6 +49,9 @@ class Item:
             transcribe_started_at=str(payload.get("transcribe_started_at", "")),
             transcribe_finished_at=str(payload.get("transcribe_finished_at", "")),
             audio_duration_seconds=_to_float(payload.get("audio_duration_seconds", 0.0)),
+            revision=_to_positive_int(payload.get("revision", 1)),
+            updated_at=str(payload.get("updated_at", "")),
+            manually_edited=bool(payload.get("manually_edited", False)),
         )
 
 
@@ -55,3 +64,10 @@ def _to_float(value) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _to_positive_int(value) -> int:
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return 1
