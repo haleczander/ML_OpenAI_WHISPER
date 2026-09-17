@@ -41,7 +41,7 @@ $resolvedOutputDirectory = [System.IO.Path]::GetFullPath((Join-Path $root $Outpu
 New-Item -ItemType Directory -Force -Path $resolvedOutputDirectory | Out-Null
 
 & $vpkPath --yes pack `
-    --packId "DicteeCourriels" `
+    --packId "haleczander.DicteeCourriels" `
     --packVersion $Version `
     --packDir $packDirectory `
     --mainExe "DicteeCourriels.exe" `
