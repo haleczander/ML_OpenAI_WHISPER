@@ -19,6 +19,9 @@ class ListItemsUseCase:
                 "transcribe_started_at": item.transcribe_started_at,
                 "transcribe_finished_at": item.transcribe_finished_at,
                 "audio_duration_seconds": item.audio_duration_seconds,
+                "revision": item.revision,
+                "updated_at": item.updated_at,
+                "manually_edited": item.manually_edited,
             }
             payload["transcript"] = _extract_post_processed(self._file_persist.read_text(item.transcript_path))
             response.append(payload)
@@ -41,6 +44,9 @@ class GetItemUseCase:
             "transcribe_started_at": item.transcribe_started_at,
             "transcribe_finished_at": item.transcribe_finished_at,
             "audio_duration_seconds": item.audio_duration_seconds,
+            "revision": item.revision,
+            "updated_at": item.updated_at,
+            "manually_edited": item.manually_edited,
         }
         payload["transcript"] = _extract_post_processed(self._file_persist.read_text(item.transcript_path))
         return payload

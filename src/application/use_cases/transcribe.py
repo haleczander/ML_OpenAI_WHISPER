@@ -80,6 +80,8 @@ class TranscribeUseCase:
             transcribe_started_at=transcribe_started_at,
             transcribe_finished_at=transcribe_finished_at,
             audio_duration_seconds=audio_duration_seconds,
+            revision=1,
+            updated_at=transcribe_finished_at,
         )
         self._repository.add(item)
         t_repo = time.perf_counter()

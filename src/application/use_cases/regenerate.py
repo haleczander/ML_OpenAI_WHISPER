@@ -45,6 +45,9 @@ class RegenerateTranscriptUseCase:
             transcribe_started_at=transcribe_started_at,
             transcribe_finished_at=transcribe_finished_at,
             audio_duration_seconds=self._transcription_service.probe_audio_duration_seconds(audio_path),
+            revision=item.revision + 1,
+            updated_at=self._utc_now(),
+            manually_edited=False,
         )
         self._repository.upsert(updated_item)
         return True, transcript
