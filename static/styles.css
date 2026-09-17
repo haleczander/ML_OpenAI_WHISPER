@@ -413,6 +413,25 @@ h1 {
   max-height: none;
 }
 
+.vocabulary-editor {
+  width: 100%;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  color: var(--ink);
+  background: #fffdf7;
+  font: inherit;
+  line-height: 1.45;
+}
+
+.vocabulary-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
 
 @keyframes fadeUp {
   from {

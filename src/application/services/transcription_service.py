@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 from src.adapters.logging_utils import get_adapter_logger
-from src.application.ports import FilePersistPort, TextPostProcessorPort, TranscribePort
+from src.application.ports import FilePersistPort, TextPostProcessorPort, TranscribePort, VocabularyPort
 
 
 class TranscriptionService:
@@ -17,15 +17,18 @@ class TranscriptionService:
         file_persist: FilePersistPort,
         transcriber: TranscribePort,
         text_post_processor: TextPostProcessorPort,
+        vocabulary: VocabularyPort | None = None,
     ) -> None:
         self._file_persist = file_persist
         self._transcriber = transcriber
         self._text_post_processor = text_post_processor
+        self._vocabulary = vocabulary
         self._logger = get_adapter_logger("transcription_service")
 
     def transcribe_audio(self, audio_path: Path) -> tuple[str, str]:
         self._logger.info("transcribe_audio.start audio_path=%s", audio_path)
-        raw_text = self._transcriber.transcribe(audio_path)
+        initial_prompt = self._vocabulary.build_prompt() if self._vocabulary else None
+        raw_text = self._transcriber.transcribe(audio_path, initial_prompt=initial_prompt)
         self._logger.info("transcribe_audio.raw_ok audio_path=%s raw_len=%s", audio_path, len(raw_text))
         post_text = self._text_post_processor.process(raw_text)
         self._logger.info("transcribe_audio.post_ok audio_path=%s post_len=%s", audio_path, len(post_text))

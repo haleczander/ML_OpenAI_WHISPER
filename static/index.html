@@ -49,6 +49,18 @@
         <div id="liveState" class="state">Pret a enregistrer.</div>
       </section>
 
+      <section class="card vocabulary">
+        <div class="card-header">
+          <h2>Vocabulaire métier</h2>
+          <p>Un terme par ligne ou séparé par des virgules. Utilisé pour les prochaines transcriptions.</p>
+        </div>
+        <textarea id="vocabularyTerms" class="vocabulary-editor" rows="4" maxlength="10000" placeholder="Ex. Kubernetes, PostgreSQL, Nom de l'entreprise"></textarea>
+        <div class="vocabulary-actions">
+          <button id="saveVocabularyBtn" class="btn secondary">Enregistrer le vocabulaire</button>
+          <span id="vocabularyState" class="state"></span>
+        </div>
+      </section>
+
       <section class="card queue">
         <div class="card-header">
           <h2>Transcriptions En Attente</h2>

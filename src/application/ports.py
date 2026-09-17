@@ -44,7 +44,7 @@ class FilePersistPort(Protocol):
 
 
 class TranscribePort(Protocol):
-    def transcribe(self, audio_path: Path) -> str:
+    def transcribe(self, audio_path: Path, initial_prompt: str | None = None) -> str:
         ...
 
     @property
@@ -58,4 +58,15 @@ class TranscribePort(Protocol):
 
 class TextPostProcessorPort(Protocol):
     def process(self, text: str) -> str:
+        ...
+
+
+class VocabularyPort(Protocol):
+    def list_terms(self) -> list[str]:
+        ...
+
+    def replace_terms(self, terms: list[str]) -> list[str]:
+        ...
+
+    def build_prompt(self) -> str | None:
         ...

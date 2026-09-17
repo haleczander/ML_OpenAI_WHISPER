@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.adapters.persistence.json_item_repository import JsonItemRepository
+from src.adapters.persistence.json_vocabulary_repository import JsonVocabularyRepository
 from src.adapters.storage.local_file_persist_adapter import LocalFilePersistAdapter
 from src.adapters.text.instruction_text_post_processor import InstructionTextPostProcessor
 from src.adapters.transcription.whisper_transcribe_adapter import WhisperTranscribeAdapter
@@ -25,12 +26,14 @@ class AppContainer:
 
         self.file_persist = LocalFilePersistAdapter(base_dir=base_dir)
         self.repository = JsonItemRepository(items_path=data_dir / "items.json")
+        self.vocabulary = JsonVocabularyRepository(vocabulary_path=data_dir / "vocabulary.json")
         self.transcriber = WhisperTranscribeAdapter(model_name="turbo", language="fr", task="transcribe")
         self.text_post_processor = InstructionTextPostProcessor()
         self.transcription_service = TranscriptionService(
             file_persist=self.file_persist,
             transcriber=self.transcriber,
             text_post_processor=self.text_post_processor,
+            vocabulary=self.vocabulary,
         )
 
         self.transcribe_use_case = TranscribeUseCase(
