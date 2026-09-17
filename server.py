@@ -1,13 +1,26 @@
 from __future__ import annotations
+
+# Velopack hooks must run before importing or constructing the application.
+if __name__ == "__main__":
+    try:
+        import velopack
+
+        velopack.App().run()
+    except ImportError:
+        # Source checkouts remain runnable before dependencies are installed.
+        pass
+
 import json
 import logging
 import os
 import secrets
+import sys
 import time
+import webbrowser
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from threading import Lock
+from threading import Lock, Timer
 import uuid
 
 from flask import Flask, jsonify, request, send_file, session
@@ -16,6 +29,7 @@ from flask_sock import Sock
 from src.app_config import AppConfig
 from src.application.container import AppContainer
 from src.runtime_paths import RuntimePaths
+from src.single_instance import SingleInstanceLock
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -65,6 +79,13 @@ try:
     APP_CONFIG = AppConfig.load(CONFIG_PATH)
 except ValueError as exc:
     raise SystemExit(str(exc)) from exc
+INSTANCE_LOCK = SingleInstanceLock(RUNTIME_PATHS.state_root / "server.lock")
+if __name__ == "__main__" and not INSTANCE_LOCK.acquire():
+    for browser_url in APP_CONFIG.browser_urls():
+        if "localhost" in browser_url:
+            webbrowser.open(browser_url)
+            break
+    raise SystemExit("Dictee Courriels is already running.")
 app = Flask(
     __name__,
     static_folder=str(RUNTIME_PATHS.resource_root / "static"),
@@ -442,6 +463,21 @@ if __name__ == "__main__":
     for browser_url in APP_CONFIG.browser_urls():
         logger.info("server_url %s", browser_url)
         print(f"Open: {browser_url}")
+    open_browser_default = bool(getattr(sys, "frozen", False))
+    open_browser_setting = os.getenv("APP_OPEN_BROWSER")
+    should_open_browser = (
+        open_browser_default
+        if open_browser_setting is None
+        else open_browser_setting.strip().lower() in {"1", "true", "yes", "on"}
+    )
+    if should_open_browser:
+        local_url = next(
+            (url for url in APP_CONFIG.browser_urls() if "localhost" in url),
+            APP_CONFIG.browser_urls()[0],
+        )
+        browser_timer = Timer(1.0, webbrowser.open, args=(local_url,))
+        browser_timer.daemon = True
+        browser_timer.start()
     if APP_CONFIG.https:
         if not CERT_PATH.exists() or not KEY_PATH.exists():
             raise SystemExit(
