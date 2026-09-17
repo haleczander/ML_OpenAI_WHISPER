@@ -210,6 +210,22 @@ def health():
     )
 
 
+@app.route("/api/vocabulary", methods=["GET"])
+def get_vocabulary():
+    return jsonify({"terms": container.vocabulary.list_terms()})
+
+
+@app.route("/api/vocabulary", methods=["PUT"])
+def update_vocabulary():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or not isinstance(payload.get("terms"), list):
+        return jsonify({"error": "terms must be an array of strings"}), 400
+    if len(payload["terms"]) > 100:
+        return jsonify({"error": "too many terms (maximum 100)"}), 400
+    terms = container.vocabulary.replace_terms(payload["terms"])
+    return jsonify({"terms": terms})
+
+
 @app.route("/api/items", methods=["GET"])
 def list_items():
     return jsonify(container.list_items_use_case.execute())

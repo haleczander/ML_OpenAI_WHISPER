@@ -111,6 +111,7 @@ Les fichiers générés ne sont pas versionnés :
 | Contenu | Emplacement |
 | --- | --- |
 | Index des dictées | `data/items.json` |
+| Vocabulaire métier local | `data/vocabulary.json` |
 | Audios envoyés/enregistrés | `data/audio/` |
 | Transcriptions | `data/transcripts/` |
 | Journal serveur et adaptateurs | `data/logs/` |

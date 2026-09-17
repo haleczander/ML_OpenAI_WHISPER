@@ -11,6 +11,9 @@ const itemsMoreBtn = document.getElementById("itemsMoreBtn");
 const jobsContainer = document.getElementById("jobs");
 const fileInput = document.getElementById("fileInput");
 const uploadBtn = document.getElementById("uploadBtn");
+const vocabularyTerms = document.getElementById("vocabularyTerms");
+const saveVocabularyBtn = document.getElementById("saveVocabularyBtn");
+const vocabularyState = document.getElementById("vocabularyState");
 
 let mediaRecorder = null;
 let chunks = [];
@@ -82,6 +85,38 @@ async function checkHealth() {
     statusDot.classList.remove("online");
     statusText.textContent = "Hors ligne";
     modelInfo.textContent = "Modele: -";
+  }
+}
+
+function parseVocabularyTerms(value) {
+  return value.split(/[\n,;]/).map((term) => term.trim()).filter(Boolean);
+}
+
+async function fetchVocabulary() {
+  const response = await fetch("/api/vocabulary");
+  if (!response.ok) throw new Error("vocabulary fetch failed");
+  const data = await response.json();
+  vocabularyTerms.value = (data.terms || []).join("\n");
+}
+
+async function saveVocabulary() {
+  const terms = parseVocabularyTerms(vocabularyTerms.value);
+  saveVocabularyBtn.disabled = true;
+  vocabularyState.textContent = "Enregistrement…";
+  try {
+    const response = await fetch("/api/vocabulary", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ terms }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "save failed");
+    vocabularyTerms.value = data.terms.join("\n");
+    vocabularyState.textContent = `${data.terms.length} terme(s) enregistré(s).`;
+  } catch (err) {
+    vocabularyState.textContent = "Impossible d’enregistrer le vocabulaire.";
+  } finally {
+    saveVocabularyBtn.disabled = false;
   }
 }
 
@@ -604,6 +639,8 @@ uploadBtn.addEventListener("click", async () => {
   await uploadBlob(fileInput.files[0]);
 });
 
+saveVocabularyBtn.addEventListener("click", saveVocabulary);
+
 if (itemsMoreBtn) {
   itemsMoreBtn.addEventListener("click", () => {
     visibleItemsCount += ITEMS_PAGE_SIZE;
@@ -612,6 +649,7 @@ if (itemsMoreBtn) {
 }
 
 checkHealth();
+fetchVocabulary().catch(() => { vocabularyState.textContent = "Vocabulaire indisponible."; });
 fetchItems();
 fetchJobs();
 openItemsSocket();

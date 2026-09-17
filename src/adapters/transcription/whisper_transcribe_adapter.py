@@ -62,7 +62,7 @@ class WhisperTranscribeAdapter:
     def device(self) -> str:
         return self._device
 
-    def transcribe(self, audio_path: Path) -> str:
+    def transcribe(self, audio_path: Path, initial_prompt: str | None = None) -> str:
         self._logger.info("transcribe.start audio_path=%s", audio_path)
         transcribe_path, cleanup_path = self._prepare_mono_audio(audio_path)
         try:
@@ -73,6 +73,8 @@ class WhisperTranscribeAdapter:
                     task=self._task,
                     fp16=(self._device == "cuda"),
                     temperature=0.0,
+                    initial_prompt=initial_prompt,
+                    carry_initial_prompt=bool(initial_prompt),
                 )
             text = result.get("text", "").strip()
             self._logger.info(
