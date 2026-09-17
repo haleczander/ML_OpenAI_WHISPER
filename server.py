@@ -13,6 +13,7 @@ import uuid
 from flask import Flask, jsonify, request, send_file, session
 from flask_sock import Sock
 
+from src.app_config import AppConfig
 from src.application.container import AppContainer
 from src.runtime_paths import RuntimePaths
 
@@ -59,6 +60,11 @@ def setup_logging() -> logging.Logger:
 
 ensure_runtime_dirs()
 os.environ.setdefault("APP_ADAPTER_LOG_DIR", str(RUNTIME_PATHS.adapter_log_dir))
+CONFIG_PATH = RUNTIME_PATHS.state_root / "config.json"
+try:
+    APP_CONFIG = AppConfig.load(CONFIG_PATH)
+except ValueError as exc:
+    raise SystemExit(str(exc)) from exc
 app = Flask(
     __name__,
     static_folder=str(RUNTIME_PATHS.resource_root / "static"),
@@ -210,6 +216,8 @@ def health():
             "status": "ok",
             "device": container.transcriber.device,
             "model": container.transcriber.model_name,
+            "https": APP_CONFIG.https,
+            "port": APP_CONFIG.port,
         }
     )
 
@@ -431,22 +439,24 @@ if __name__ == "__main__":
         RUNTIME_PATHS.state_root,
         LOG_PATH,
     )
-    use_ssl = os.getenv("APP_SSL", "1").strip().lower() not in {"0", "false", "no"}
-    if use_ssl:
+    for browser_url in APP_CONFIG.browser_urls():
+        logger.info("server_url %s", browser_url)
+        print(f"Open: {browser_url}")
+    if APP_CONFIG.https:
         if not CERT_PATH.exists() or not KEY_PATH.exists():
             raise SystemExit(
                 f"Missing HTTPS certs. Create {CERT_PATH} and {KEY_PATH} "
                 "or start with APP_SSL=0."
             )
         app.run(
-            host="0.0.0.0",
-            port=8000,
+            host=APP_CONFIG.host,
+            port=APP_CONFIG.port,
             debug=False,
             ssl_context=(str(CERT_PATH), str(KEY_PATH)),
         )
     else:
         app.run(
-            host="0.0.0.0",
-            port=8000,
+            host=APP_CONFIG.host,
+            port=APP_CONFIG.port,
             debug=False,
         )
