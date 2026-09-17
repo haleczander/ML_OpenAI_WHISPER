@@ -14,31 +14,26 @@ from flask import Flask, jsonify, request, send_file, session
 from flask_sock import Sock
 
 from src.application.container import AppContainer
+from src.runtime_paths import RuntimePaths
 
 
 BASE_DIR = Path(__file__).resolve().parent
-CERT_DIR = BASE_DIR / "certs"
+RUNTIME_PATHS = RuntimePaths.discover(BASE_DIR)
+DATA_DIR = RUNTIME_PATHS.data_dir
+CERT_DIR = RUNTIME_PATHS.cert_dir
 CERT_PATH = CERT_DIR / "local.pem"
 KEY_PATH = CERT_DIR / "local-key.pem"
-LOG_DIR = BASE_DIR / "data" / "logs"
+LOG_DIR = RUNTIME_PATHS.log_dir
 LOG_PATH = LOG_DIR / "server.log"
-RUNTIME_DIRS = [
-    BASE_DIR / "data",
-    BASE_DIR / "data" / "audio",
-    BASE_DIR / "data" / "transcripts",
-    BASE_DIR / "data" / "logs",
-    BASE_DIR / "data" / "logs" / "adapters",
-    BASE_DIR / "certs",
-]
 
 
 def ensure_runtime_dirs() -> None:
-    for path in RUNTIME_DIRS:
-        try:
-            path.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            # Keep startup resilient even if one directory is not writable.
-            print(f"[warn] cannot create runtime dir: {path} ({exc})")
+    try:
+        RUNTIME_PATHS.migrate_legacy_state()
+        RUNTIME_PATHS.ensure_directories()
+    except OSError as exc:
+        # Keep startup resilient if an optional runtime directory is unavailable.
+        print(f"[warn] cannot initialize runtime directories: {exc}")
 
 
 def setup_logging() -> logging.Logger:
@@ -63,14 +58,23 @@ def setup_logging() -> logging.Logger:
 
 
 ensure_runtime_dirs()
-app = Flask(__name__, static_folder="static", static_url_path="/static")
+os.environ.setdefault("APP_ADAPTER_LOG_DIR", str(RUNTIME_PATHS.adapter_log_dir))
+app = Flask(
+    __name__,
+    static_folder=str(RUNTIME_PATHS.resource_root / "static"),
+    static_url_path="/static",
+)
 # This deliberately changes at every server restart: browser identities are only
 # useful to suppress a notification for the browser that submitted an upload.
 app.config["SECRET_KEY"] = secrets.token_urlsafe(32)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 sock = Sock(app)
-container = AppContainer(base_dir=BASE_DIR)
+container = AppContainer(
+    resource_root=RUNTIME_PATHS.resource_root,
+    state_root=RUNTIME_PATHS.state_root,
+    model_dir=RUNTIME_PATHS.model_dir,
+)
 container.file_persist.ensure_dirs()
 logger = setup_logging()
 transcribe_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="transcribe")
@@ -421,12 +425,17 @@ def index():
 
 
 if __name__ == "__main__":
-    logger.info("server_start base_dir=%s log_path=%s", BASE_DIR, LOG_PATH)
+    logger.info(
+        "server_start resource_root=%s state_root=%s log_path=%s",
+        RUNTIME_PATHS.resource_root,
+        RUNTIME_PATHS.state_root,
+        LOG_PATH,
+    )
     use_ssl = os.getenv("APP_SSL", "1").strip().lower() not in {"0", "false", "no"}
     if use_ssl:
         if not CERT_PATH.exists() or not KEY_PATH.exists():
             raise SystemExit(
-                "Missing HTTPS certs. Create certs/local.pem and certs/local-key.pem "
+                f"Missing HTTPS certs. Create {CERT_PATH} and {KEY_PATH} "
                 "or start with APP_SSL=0."
             )
         app.run(

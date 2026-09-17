@@ -21,19 +21,31 @@ from src.application.use_cases.transcribe import TranscribeUseCase
 
 
 class AppContainer:
-    def __init__(self, base_dir: Path) -> None:
-        data_dir = base_dir / "data"
+    def __init__(
+        self,
+        resource_root: Path,
+        state_root: Path,
+        model_dir: Path | None = None,
+    ) -> None:
+        data_dir = state_root / "data"
 
-        self.file_persist = LocalFilePersistAdapter(base_dir=base_dir)
+        self.file_persist = LocalFilePersistAdapter(base_dir=state_root)
         self.repository = JsonItemRepository(items_path=data_dir / "items.json")
         self.vocabulary = JsonVocabularyRepository(vocabulary_path=data_dir / "vocabulary.json")
-        self.transcriber = WhisperTranscribeAdapter(model_name="turbo", language="fr", task="transcribe")
+        self.transcriber = WhisperTranscribeAdapter(
+            model_name="turbo",
+            language="fr",
+            task="transcribe",
+            resource_root=resource_root,
+            model_dir=model_dir,
+        )
         self.text_post_processor = InstructionTextPostProcessor()
         self.transcription_service = TranscriptionService(
             file_persist=self.file_persist,
             transcriber=self.transcriber,
             text_post_processor=self.text_post_processor,
             vocabulary=self.vocabulary,
+            ffprobe_path=resource_root / "vendor" / "ffmpeg" / "bin" / "ffprobe.exe",
         )
 
         self.transcribe_use_case = TranscribeUseCase(
