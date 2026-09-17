@@ -65,6 +65,10 @@ function setLiveTranscript(text) {
   liveTranscript.textContent = text || "En attente de transcription...";
 }
 
+function notifyNewItem(item) {
+  window.alert("Nouveau transcript disponible.");
+}
+
 async function checkHealth() {
   try {
     const response = await fetch("/api/health");
@@ -306,10 +310,15 @@ function setJobsState(jobs) {
 }
 
 function applyOps(ops) {
+  const incomingItems = [];
   ops.forEach((op) => {
     if (op.entity === "item") {
       if (op.action === "upsert" && op.item) {
+        const isNewItem = !itemsState[op.item.id];
         itemsState[op.item.id] = op.item;
+        if (isNewItem && op.notify) {
+          incomingItems.push(op.item);
+        }
       }
       if (op.action === "delete" && op.id) {
         delete itemsState[op.id];
@@ -327,6 +336,7 @@ function applyOps(ops) {
   });
   renderItems(sortItems(Object.values(itemsState)));
   renderJobs(sortJobs(Object.values(jobsState)));
+  incomingItems.forEach(notifyNewItem);
 }
 
 async function fetchItems() {

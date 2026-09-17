@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
 import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -9,7 +10,7 @@ from datetime import datetime, timezone
 from threading import Lock
 import uuid
 
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request, send_file, session
 from flask_sock import Sock
 
 from src.application.container import AppContainer
@@ -63,6 +64,11 @@ def setup_logging() -> logging.Logger:
 
 ensure_runtime_dirs()
 app = Flask(__name__, static_folder="static", static_url_path="/static")
+# This deliberately changes at every server restart: browser identities are only
+# useful to suppress a notification for the browser that submitted an upload.
+app.config["SECRET_KEY"] = secrets.token_urlsafe(32)
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 sock = Sock(app)
 container = AppContainer(base_dir=BASE_DIR)
 container.file_persist.ensure_dirs()
@@ -74,6 +80,24 @@ jobs: dict[str, dict[str, str]] = {}
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def browser_session_id() -> str:
+    """Return the anonymous, browser-session identity used for notifications."""
+    browser_id = session.get("browser_session_id")
+    if not browser_id:
+        browser_id = uuid.uuid4().hex
+        session["browser_session_id"] = browser_id
+    return browser_id
+
+
+def origin_session_for_item(item_id: str) -> str:
+    """Find the browser session that created an item while its job is retained."""
+    with jobs_lock:
+        for job in jobs.values():
+            if job.get("kind") == "upload" and job.get("item_id") == item_id:
+                return job.get("origin_session_id", "")
+    return ""
 
 
 def cleanup_jobs() -> None:
@@ -216,6 +240,7 @@ def upload():
     payload = audio_file.read()
     suffix = Path(audio_file.filename).suffix.lower() or ".webm"
     job_id = uuid.uuid4().hex
+    origin_session_id = browser_session_id()
     logger.info("pipeline.upload.queued job_id=%s", job_id)
     with jobs_lock:
         jobs[job_id] = {
@@ -227,6 +252,7 @@ def upload():
             "finished_at": "",
             "item_id": "",
             "error": "",
+            "origin_session_id": origin_session_id,
         }
     transcribe_executor.submit(
         run_transcription_job,
@@ -282,6 +308,9 @@ def regenerate_item_transcript(item_id: str):
 
 @sock.route("/ws/items")
 def ws_items(ws):
+    # The WebSocket handshake carries the same session cookie as the upload.
+    # The index route establishes it before app.js opens this socket.
+    viewer_session_id = browser_session_id()
     previous_items: dict[str, dict] = {}
     previous_jobs: dict[str, dict] = {}
 
@@ -309,7 +338,13 @@ def ws_items(ws):
 
         for item_id, item in current_items.items():
             if item_id not in previous_items or previous_items[item_id] != item:
-                ops.append({"entity": "item", "action": "upsert", "item": item})
+                operation = {"entity": "item", "action": "upsert", "item": item}
+                if item_id not in previous_items:
+                    origin_session_id = origin_session_for_item(item_id)
+                    operation["notify"] = bool(
+                        origin_session_id and origin_session_id != viewer_session_id
+                    )
+                ops.append(operation)
         for item_id in previous_items.keys():
             if item_id not in current_items:
                 ops.append({"entity": "item", "action": "delete", "id": item_id})
@@ -341,6 +376,9 @@ def delete_item(item_id: str):
 
 @app.route("/", methods=["GET"])
 def index():
+    # Set the anonymous session cookie in the ordinary HTTP response, before
+    # the browser opens the WebSocket connection.
+    browser_session_id()
     return app.send_static_file("index.html")
 
 
