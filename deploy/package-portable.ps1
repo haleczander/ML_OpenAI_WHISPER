@@ -21,9 +21,6 @@ New-Item -ItemType Directory -Force -Path $staging | Out-Null
 
 $vendorBin = Join-Path $root "vendor\ffmpeg\bin"
 New-Item -ItemType Directory -Force -Path $vendorBin | Out-Null
-$deployCerts = Join-Path $root "deploy\certs"
-New-Item -ItemType Directory -Force -Path $deployCerts | Out-Null
-
 if ($FfmpegSource) {
     $resolvedSource = Resolve-Path -LiteralPath $FfmpegSource -ErrorAction Stop
     $sourcePath = $resolvedSource.Path
@@ -57,14 +54,6 @@ if (-not (Test-Path $bundledFfprobe)) {
     throw "Missing bundled ffprobe at vendor\\ffmpeg\\bin\\ffprobe.exe. Provide -FfmpegSource with a full ffmpeg distro."
 }
 
-$rootCert = Join-Path $root "certs\local.pem"
-$rootKey = Join-Path $root "certs\local-key.pem"
-if ((Test-Path $rootCert) -and (Test-Path $rootKey)) {
-    Copy-Item -Force $rootCert (Join-Path $deployCerts "local.pem")
-    Copy-Item -Force $rootKey (Join-Path $deployCerts "local-key.pem")
-    Write-Host "Bundled HTTPS certs from certs/ into deploy/certs/"
-}
-
 $items = @(
     "server.py",
     "requirements.txt",
@@ -74,10 +63,8 @@ $items = @(
     "static",
     "deploy\install.ps1",
     "deploy\run.ps1",
-    "deploy\certs",
-    "certs",
-    "vendor\ffmpeg\bin",
-    "data"
+    "deploy\setup-https.ps1",
+    "vendor\ffmpeg\bin"
 )
 
 $existing = $items | Where-Object { Test-Path $_ }
@@ -86,9 +73,6 @@ if (-not $existing -or $existing.Count -eq 0) {
 }
 
 foreach ($item in $existing) {
-    if ($item -eq "data") {
-        continue
-    }
     $destination = Join-Path $staging $item
     $destinationParent = Split-Path -Parent $destination
     if ($destinationParent) {
@@ -96,10 +80,6 @@ foreach ($item in $existing) {
     }
     Copy-Item -Path $item -Destination $destination -Recurse -Force
 }
-
-New-Item -ItemType Directory -Force -Path (Join-Path $staging "data") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $staging "data\audio") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $staging "data\transcripts") | Out-Null
 
 Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $zipPath -CompressionLevel Optimal
 Remove-Item -Recurse -Force $staging

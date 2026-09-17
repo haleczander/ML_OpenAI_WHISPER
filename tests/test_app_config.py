@@ -52,6 +52,18 @@ class AppConfigTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         AppConfig.load(path, environ={})
 
+    def test_windows_powershell_utf8_bom_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "config.json"
+            path.write_text(
+                json.dumps({"host": "0.0.0.0", "port": 8000, "https": True}),
+                encoding="utf-8-sig",
+            )
+
+            config = AppConfig.load(path, environ={})
+
+            self.assertTrue(config.https)
+
     def test_browser_urls_include_localhost_and_lan_addresses(self) -> None:
         config = AppConfig(host="0.0.0.0", port=8123, https=True)
         with patch("src.app_config.discover_lan_addresses", return_value=["192.168.1.20"]):

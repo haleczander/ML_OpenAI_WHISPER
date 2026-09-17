@@ -24,7 +24,9 @@ class AppConfig:
         env = os.environ if environ is None else environ
         if path.exists():
             try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
+                # utf-8-sig also accepts files written by Windows PowerShell 5,
+                # whose UTF-8 encoding includes a byte-order mark.
+                payload = json.loads(path.read_text(encoding="utf-8-sig"))
             except (OSError, json.JSONDecodeError) as exc:
                 raise ValueError(f"Invalid configuration file {path}: {exc}") from exc
             if not isinstance(payload, dict):
