@@ -13,6 +13,10 @@ from src.runtime_paths import RuntimePaths
 
 
 class RuntimePathsTests(unittest.TestCase):
+    @staticmethod
+    def assert_same_path(actual: Path, expected: Path) -> None:
+        assert actual.resolve() == expected.resolve()
+
     def test_development_defaults_remain_in_project(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             app_dir = Path(temp) / "checkout"
@@ -20,9 +24,9 @@ class RuntimePathsTests(unittest.TestCase):
 
             paths = RuntimePaths.discover(app_dir, environ={}, frozen=False)
 
-            self.assertEqual(paths.state_root, app_dir)
-            self.assertEqual(paths.data_dir, app_dir / "data")
-            self.assertEqual(paths.cert_dir, app_dir / "certs")
+            self.assert_same_path(paths.state_root, app_dir)
+            self.assert_same_path(paths.data_dir, app_dir / "data")
+            self.assert_same_path(paths.cert_dir, app_dir / "certs")
             self.assertIsNone(paths.model_dir)
 
     def test_packaged_defaults_use_local_app_data(self) -> None:
@@ -38,10 +42,10 @@ class RuntimePathsTests(unittest.TestCase):
             )
 
             state_root = root / "user-state" / "DicteeCourriels"
-            self.assertEqual(paths.state_root, state_root)
-            self.assertEqual(paths.data_dir, state_root / "data")
-            self.assertEqual(paths.cert_dir, state_root / "certs")
-            self.assertEqual(paths.model_dir, state_root / "models")
+            self.assert_same_path(paths.state_root, state_root)
+            self.assert_same_path(paths.data_dir, state_root / "data")
+            self.assert_same_path(paths.cert_dir, state_root / "certs")
+            self.assert_same_path(paths.model_dir, state_root / "models")
 
     def test_external_state_survives_application_replacement(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
