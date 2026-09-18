@@ -18,8 +18,11 @@ class WhisperTranscribeAdapter:
         model_name: str = "turbo",
         language: str = "fr",
         task: str = "transcribe",
+        resource_root: Path | None = None,
+        model_dir: Path | None = None,
     ) -> None:
         self._logger = get_adapter_logger("whisper_transcribe_adapter")
+        self._resource_root = resource_root or Path(__file__).resolve().parents[3]
         self._ffmpeg_cmd = self._configure_bundled_ffmpeg()
         self._model_name = model_name
         self._language = language
@@ -33,12 +36,15 @@ class WhisperTranscribeAdapter:
             task,
             self._device,
         )
-        self._model = whisper.load_model(model_name, device=self._device)
+        load_options = {"device": self._device}
+        if model_dir is not None:
+            model_dir.mkdir(parents=True, exist_ok=True)
+            load_options["download_root"] = str(model_dir)
+        self._model = whisper.load_model(model_name, **load_options)
         self._logger.info("init.success model=%s", model_name)
 
     def _configure_bundled_ffmpeg(self) -> str:
-        project_root = Path(__file__).resolve().parents[3]
-        ffmpeg_exe = project_root / "vendor" / "ffmpeg" / "bin" / "ffmpeg.exe"
+        ffmpeg_exe = self._resource_root / "vendor" / "ffmpeg" / "bin" / "ffmpeg.exe"
         if not ffmpeg_exe.exists():
             raise RuntimeError(f"Bundled ffmpeg not found: {ffmpeg_exe}")
 

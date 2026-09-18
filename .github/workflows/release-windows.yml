@@ -1,0 +1,108 @@
+name: Release Windows
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "SemVer release version (for example 1.2.3)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      FFMPEG_URL: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+      FFMPEG_SHA256: FEC81AE03971D9DD4BE3EBE02E263BD2EC1D789483F931BDBA5F5715E65DA2E9
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Resolve release version
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          if (-not $version) { $version = $env:GITHUB_REF_NAME.TrimStart("v") }
+          if ($version -notmatch '^\d+\.\d+\.\d+([\-+][0-9A-Za-z.-]+)?$') {
+            throw "Invalid SemVer: $version"
+          }
+          "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-build.txt
+
+      - name: Install Velopack CLI
+        run: dotnet tool install --global vpk --version 1.2.0
+
+      - name: Download verified FFmpeg build
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "ffmpeg.zip"
+          $extract = Join-Path $env:RUNNER_TEMP "ffmpeg"
+          Invoke-WebRequest -Uri $env:FFMPEG_URL -OutFile $zip
+          $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash
+          if ($actualHash -ne $env:FFMPEG_SHA256) {
+            throw "FFmpeg checksum mismatch: $actualHash"
+          }
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+          $ffmpegRoot = Get-ChildItem -Path $extract -Directory | Select-Object -First 1
+          if (-not $ffmpegRoot) { throw "FFmpeg archive extraction failed" }
+          New-Item -ItemType Directory -Force vendor\ffmpeg\bin | Out-Null
+          Copy-Item -Force (Join-Path $ffmpegRoot.FullName "bin\ffmpeg.exe") vendor\ffmpeg\bin\ffmpeg.exe
+          Copy-Item -Force (Join-Path $ffmpegRoot.FullName "bin\ffprobe.exe") vendor\ffmpeg\bin\ffprobe.exe
+
+      - name: Test
+        run: python -m unittest discover -s tests -v
+
+      - name: Build standalone server
+        shell: pwsh
+        run: .\deploy\build-server.ps1 -PythonPath (Get-Command python).Source
+
+      - name: Download previous release for delta generation
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $vpk = Join-Path $env:USERPROFILE ".dotnet\tools\vpk.exe"
+          & $vpk --yes download github `
+            --repoUrl "https://github.com/${{ github.repository }}" `
+            --token "${{ secrets.GITHUB_TOKEN }}" `
+            --outputDir Releases
+
+      - name: Create installer and update packages
+        shell: pwsh
+        run: .\deploy\package-installer.ps1 -Version "${{ steps.version.outputs.value }}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DicteeCourriels-${{ steps.version.outputs.value }}
+          path: Releases/*
+
+      - name: Publish GitHub release
+        shell: pwsh
+        run: |
+          $vpk = Join-Path $env:USERPROFILE ".dotnet\tools\vpk.exe"
+          & $vpk --yes upload github `
+            --repoUrl "https://github.com/${{ github.repository }}" `
+            --token "${{ secrets.GITHUB_TOKEN }}" `
+            --outputDir Releases `
+            --publish `
+            --tag "v${{ steps.version.outputs.value }}" `
+            --releaseName "Dictee Courriels ${{ steps.version.outputs.value }}"

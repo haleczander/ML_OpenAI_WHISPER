@@ -75,6 +75,12 @@ class LocalFilePersistAdapter:
 
     def resolve(self, relative_path: str) -> Path:
         normalized = relative_path.replace("\\", "/")
-        resolved = self._base_dir / Path(normalized)
+        relative = Path(normalized)
+        if relative.is_absolute():
+            raise ValueError(f"Absolute paths are not allowed: {relative_path}")
+        base_dir = self._base_dir.resolve()
+        resolved = (base_dir / relative).resolve()
+        if resolved != base_dir and base_dir not in resolved.parents:
+            raise ValueError(f"Path escapes the application state directory: {relative_path}")
         self._logger.info("resolve.success relative_path=%s resolved=%s", relative_path, resolved)
         return resolved

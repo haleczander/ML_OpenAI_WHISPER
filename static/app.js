@@ -14,6 +14,9 @@ const uploadBtn = document.getElementById("uploadBtn");
 const vocabularyTerms = document.getElementById("vocabularyTerms");
 const saveVocabularyBtn = document.getElementById("saveVocabularyBtn");
 const vocabularyState = document.getElementById("vocabularyState");
+const updatePanel = document.getElementById("updatePanel");
+const updateText = document.getElementById("updateText");
+const updateBtn = document.getElementById("updateBtn");
 
 let mediaRecorder = null;
 let chunks = [];
@@ -85,6 +88,50 @@ async function checkHealth() {
     statusDot.classList.remove("online");
     statusText.textContent = "Hors ligne";
     modelInfo.textContent = "Modele: -";
+  }
+}
+
+async function postUpdateAction(action) {
+  updateBtn.disabled = true;
+  try {
+    await fetch(`/api/update/${action}`, { method: "POST" });
+  } finally {
+    await refreshUpdateStatus();
+  }
+}
+
+async function refreshUpdateStatus() {
+  try {
+    const response = await fetch("/api/update");
+    const update = await response.json();
+    updatePanel.hidden = !update.enabled || ["idle", "up_to_date", "disabled"].includes(update.status);
+    updateBtn.hidden = false;
+    updateBtn.disabled = false;
+    if (update.status === "checking") {
+      updateText.textContent = "Recherche d'une mise a jour...";
+      updateBtn.hidden = true;
+    } else if (update.status === "available") {
+      updateText.textContent = `Version ${update.available_version} disponible.`;
+      updateBtn.textContent = "Telecharger";
+      updateBtn.onclick = () => postUpdateAction("download");
+    } else if (update.status === "downloading") {
+      updateText.textContent = `Telechargement: ${update.progress}%`;
+      updateBtn.hidden = true;
+    } else if (update.status === "downloaded") {
+      updateText.textContent = `Version ${update.available_version} prete.`;
+      updateBtn.textContent = "Installer et redemarrer";
+      updateBtn.onclick = () => postUpdateAction("apply");
+    } else if (update.status === "applying") {
+      updateText.textContent = "Installation et redemarrage...";
+      updateBtn.hidden = true;
+    } else if (update.status === "error") {
+      updateText.textContent = "Verification des mises a jour impossible.";
+      updateBtn.textContent = "Reessayer";
+      updateBtn.onclick = () => postUpdateAction("check");
+      updatePanel.hidden = false;
+    }
+  } catch (err) {
+    updatePanel.hidden = true;
   }
 }
 
@@ -649,6 +696,8 @@ if (itemsMoreBtn) {
 }
 
 checkHealth();
+refreshUpdateStatus();
+setInterval(refreshUpdateStatus, 5000);
 fetchVocabulary().catch(() => { vocabularyState.textContent = "Vocabulaire indisponible."; });
 fetchItems();
 fetchJobs();

@@ -3,7 +3,9 @@ certs/
 __pycache__/
 build/
 dist/
+Releases/
 *.spec
+!deploy/DicteeCourriels.spec
 data/
 certs/
 data/

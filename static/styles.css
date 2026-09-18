@@ -118,6 +118,28 @@ h1 {
   color: var(--ink);
 }
 
+.update-panel {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.update-panel[hidden] {
+  display: none;
+}
+
+.update-btn {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--line);

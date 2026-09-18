@@ -18,11 +18,13 @@ class TranscriptionService:
         transcriber: TranscribePort,
         text_post_processor: TextPostProcessorPort,
         vocabulary: VocabularyPort | None = None,
+        ffprobe_path: Path | None = None,
     ) -> None:
         self._file_persist = file_persist
         self._transcriber = transcriber
         self._text_post_processor = text_post_processor
         self._vocabulary = vocabulary
+        self._ffprobe_path = ffprobe_path
         self._logger = get_adapter_logger("transcription_service")
 
     def transcribe_audio(self, audio_path: Path) -> tuple[str, str]:
@@ -52,8 +54,9 @@ class TranscriptionService:
         return f"{raw_part}\n\n{cls.POST_HEADER}\n{post_text.strip()}\n"
 
     def probe_audio_duration_seconds(self, audio_path: Path) -> float:
-        project_root = Path(__file__).resolve().parents[3]
-        ffprobe_exe = project_root / "vendor" / "ffmpeg" / "bin" / "ffprobe.exe"
+        ffprobe_exe = self._ffprobe_path or (
+            Path(__file__).resolve().parents[3] / "vendor" / "ffmpeg" / "bin" / "ffprobe.exe"
+        )
         if not ffprobe_exe.exists():
             self._logger.info("probe_audio_duration.skip reason=missing_ffprobe path=%s", ffprobe_exe)
             return 0.0

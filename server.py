@@ -1,44 +1,55 @@
 from __future__ import annotations
+
+# Velopack hooks must run before importing or constructing the application.
+if __name__ == "__main__":
+    try:
+        import velopack
+
+        velopack.App().run()
+    except ImportError:
+        # Source checkouts remain runnable before dependencies are installed.
+        pass
+
 import json
 import logging
 import os
 import secrets
+import sys
 import time
+import webbrowser
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from threading import Lock
+from threading import Lock, Timer
 import uuid
 
 from flask import Flask, jsonify, request, send_file, session
 from flask_sock import Sock
 
+from src.app_config import AppConfig
 from src.application.container import AppContainer
+from src.runtime_paths import RuntimePaths
+from src.single_instance import SingleInstanceLock
+from src.update_service import DEFAULT_UPDATE_REPOSITORY, UpdateService
 
 
 BASE_DIR = Path(__file__).resolve().parent
-CERT_DIR = BASE_DIR / "certs"
+RUNTIME_PATHS = RuntimePaths.discover(BASE_DIR)
+DATA_DIR = RUNTIME_PATHS.data_dir
+CERT_DIR = RUNTIME_PATHS.cert_dir
 CERT_PATH = CERT_DIR / "local.pem"
 KEY_PATH = CERT_DIR / "local-key.pem"
-LOG_DIR = BASE_DIR / "data" / "logs"
+LOG_DIR = RUNTIME_PATHS.log_dir
 LOG_PATH = LOG_DIR / "server.log"
-RUNTIME_DIRS = [
-    BASE_DIR / "data",
-    BASE_DIR / "data" / "audio",
-    BASE_DIR / "data" / "transcripts",
-    BASE_DIR / "data" / "logs",
-    BASE_DIR / "data" / "logs" / "adapters",
-    BASE_DIR / "certs",
-]
 
 
 def ensure_runtime_dirs() -> None:
-    for path in RUNTIME_DIRS:
-        try:
-            path.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            # Keep startup resilient even if one directory is not writable.
-            print(f"[warn] cannot create runtime dir: {path} ({exc})")
+    try:
+        RUNTIME_PATHS.migrate_legacy_state()
+        RUNTIME_PATHS.ensure_directories()
+    except OSError as exc:
+        # Keep startup resilient if an optional runtime directory is unavailable.
+        print(f"[warn] cannot initialize runtime directories: {exc}")
 
 
 def setup_logging() -> logging.Logger:
@@ -63,19 +74,49 @@ def setup_logging() -> logging.Logger:
 
 
 ensure_runtime_dirs()
-app = Flask(__name__, static_folder="static", static_url_path="/static")
+os.environ.setdefault("APP_ADAPTER_LOG_DIR", str(RUNTIME_PATHS.adapter_log_dir))
+CONFIG_PATH = RUNTIME_PATHS.state_root / "config.json"
+try:
+    APP_CONFIG = AppConfig.load(CONFIG_PATH)
+except ValueError as exc:
+    raise SystemExit(str(exc)) from exc
+INSTANCE_LOCK = SingleInstanceLock(RUNTIME_PATHS.state_root / "server.lock")
+if __name__ == "__main__" and not INSTANCE_LOCK.acquire():
+    for browser_url in APP_CONFIG.browser_urls():
+        if "localhost" in browser_url:
+            webbrowser.open(browser_url)
+            break
+    raise SystemExit("Dictee Courriels is already running.")
+app = Flask(
+    __name__,
+    static_folder=str(RUNTIME_PATHS.resource_root / "static"),
+    static_url_path="/static",
+)
 # This deliberately changes at every server restart: browser identities are only
 # useful to suppress a notification for the browser that submitted an upload.
 app.config["SECRET_KEY"] = secrets.token_urlsafe(32)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 sock = Sock(app)
-container = AppContainer(base_dir=BASE_DIR)
+container = AppContainer(
+    resource_root=RUNTIME_PATHS.resource_root,
+    state_root=RUNTIME_PATHS.state_root,
+    model_dir=RUNTIME_PATHS.model_dir,
+)
 container.file_persist.ensure_dirs()
 logger = setup_logging()
 transcribe_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="transcribe")
 jobs_lock = Lock()
 jobs: dict[str, dict[str, str]] = {}
+updates_enabled = bool(getattr(sys, "frozen", False)) and os.getenv(
+    "APP_UPDATE_ENABLED", "1"
+).strip().lower() not in {"0", "false", "no", "off"}
+update_service = UpdateService(
+    enabled=updates_enabled,
+    repository_url=os.getenv("APP_UPDATE_REPOSITORY", DEFAULT_UPDATE_REPOSITORY),
+)
+if updates_enabled:
+    update_service.check_async()
 
 
 def utc_now() -> str:
@@ -206,8 +247,33 @@ def health():
             "status": "ok",
             "device": container.transcriber.device,
             "model": container.transcriber.model_name,
+            "https": APP_CONFIG.https,
+            "port": APP_CONFIG.port,
         }
     )
+
+
+@app.route("/api/update", methods=["GET"])
+def get_update_status():
+    return jsonify(update_service.snapshot())
+
+
+@app.route("/api/update/check", methods=["POST"])
+def check_for_update():
+    worker = update_service.check_async()
+    return jsonify(update_service.snapshot()), 202 if worker else 409
+
+
+@app.route("/api/update/download", methods=["POST"])
+def download_update():
+    worker = update_service.download_async()
+    return jsonify(update_service.snapshot()), 202 if worker else 409
+
+
+@app.route("/api/update/apply", methods=["POST"])
+def apply_update():
+    worker = update_service.apply_async()
+    return jsonify(update_service.snapshot()), 202 if worker else 409
 
 
 @app.route("/api/vocabulary", methods=["GET"])
@@ -421,23 +487,45 @@ def index():
 
 
 if __name__ == "__main__":
-    logger.info("server_start base_dir=%s log_path=%s", BASE_DIR, LOG_PATH)
-    use_ssl = os.getenv("APP_SSL", "1").strip().lower() not in {"0", "false", "no"}
-    if use_ssl:
+    logger.info(
+        "server_start resource_root=%s state_root=%s log_path=%s",
+        RUNTIME_PATHS.resource_root,
+        RUNTIME_PATHS.state_root,
+        LOG_PATH,
+    )
+    for browser_url in APP_CONFIG.browser_urls():
+        logger.info("server_url %s", browser_url)
+        print(f"Open: {browser_url}")
+    open_browser_default = bool(getattr(sys, "frozen", False))
+    open_browser_setting = os.getenv("APP_OPEN_BROWSER")
+    should_open_browser = (
+        open_browser_default
+        if open_browser_setting is None
+        else open_browser_setting.strip().lower() in {"1", "true", "yes", "on"}
+    )
+    if should_open_browser:
+        local_url = next(
+            (url for url in APP_CONFIG.browser_urls() if "localhost" in url),
+            APP_CONFIG.browser_urls()[0],
+        )
+        browser_timer = Timer(1.0, webbrowser.open, args=(local_url,))
+        browser_timer.daemon = True
+        browser_timer.start()
+    if APP_CONFIG.https:
         if not CERT_PATH.exists() or not KEY_PATH.exists():
             raise SystemExit(
-                "Missing HTTPS certs. Create certs/local.pem and certs/local-key.pem "
+                f"Missing HTTPS certs. Create {CERT_PATH} and {KEY_PATH} "
                 "or start with APP_SSL=0."
             )
         app.run(
-            host="0.0.0.0",
-            port=8000,
+            host=APP_CONFIG.host,
+            port=APP_CONFIG.port,
             debug=False,
             ssl_context=(str(CERT_PATH), str(KEY_PATH)),
         )
     else:
         app.run(
-            host="0.0.0.0",
-            port=8000,
+            host=APP_CONFIG.host,
+            port=APP_CONFIG.port,
             debug=False,
         )

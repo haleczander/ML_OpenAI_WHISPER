@@ -40,8 +40,6 @@ $env:PIP_NO_CACHE_DIR = "1"
 & $venvPython -m pip install --upgrade pip --no-cache-dir
 & $venvPython -m pip install -r requirements.txt --no-cache-dir
 
-New-Item -ItemType Directory -Force -Path "$root\certs" | Out-Null
-
 $bundledFfmpeg = Join-Path $root "vendor\ffmpeg\bin\ffmpeg.exe"
 if (Test-Path $bundledFfmpeg) {
     Write-Host "Bundled ffmpeg found: $bundledFfmpeg"
@@ -50,17 +48,9 @@ if (Test-Path $bundledFfmpeg) {
     Write-Host "Install with winget: winget install --id Gyan.FFmpeg -e"
 }
 
-$bundledCert = Join-Path $root "deploy\certs\local.pem"
-$bundledKey = Join-Path $root "deploy\certs\local-key.pem"
-if ((Test-Path $bundledCert) -and (Test-Path $bundledKey)) {
-    Copy-Item -Force $bundledCert "$root\certs\local.pem"
-    Copy-Item -Force $bundledKey "$root\certs\local-key.pem"
-    Write-Host "Bundled HTTPS certs copied to certs/"
-}
-
 if (-not (Test-Path "$root\certs\local.pem") -or -not (Test-Path "$root\certs\local-key.pem")) {
     Write-Warning "HTTPS cert files are missing. You can still run in HTTP mode."
-    Write-Host "To bundle certs, add deploy/certs/local.pem and deploy/certs/local-key.pem"
+    Write-Host "Configure this host with: .\deploy\setup-https.ps1"
 }
 
 Write-Host "Install complete."

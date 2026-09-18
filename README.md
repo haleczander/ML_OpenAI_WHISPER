@@ -2,6 +2,45 @@
 
 Application locale de dictée et de transcription française basée sur OpenAI Whisper. Le navigateur enregistre ou envoie un fichier audio ; le serveur Flask le transcrit, applique un léger post-traitement puis conserve l'audio et le résultat localement.
 
+## Distribution Windows recommandée
+
+L'application est distribuée sous forme d'un `Setup.exe` Velopack. Python, Whisper, Torch, l'interface web et FFmpeg sont inclus dans l'installation. Le modèle Whisper est téléchargé une seule fois au premier lancement.
+
+Les fichiers applicatifs remplaçables sont installés sous `%LOCALAPPDATA%\haleczander.DicteeCourriels\current`. Les données qui doivent survivre aux mises à jour et à une réinstallation restent dans une racine séparée :
+
+```text
+%LOCALAPPDATA%\DicteeCourriels\
+  data\        # dictées, audios, transcriptions et logs
+  certs\       # certificat HTTPS propre à ce PC
+  models\      # modèle Whisper
+  config.json  # host, port et HTTPS
+```
+
+Une nouvelle version est détectée au démarrage. L'interface permet de télécharger le delta, puis d'installer la mise à jour et de redémarrer. Le dossier `current` est remplacé par Velopack ; les données ci-dessus ne sont pas touchées.
+
+### Construire l'installeur
+
+Prérequis de build : Python 3.14, .NET SDK 10, `vpk` 1.2.0 et FFmpeg dans `vendor/ffmpeg/bin`.
+
+```powershell
+python -m pip install -r requirements.txt -r requirements-build.txt
+dotnet tool install --global vpk --version 1.2.0
+powershell -ExecutionPolicy Bypass -File .\deploy\release.ps1 -Version 0.1.0
+```
+
+Les artefacts sont écrits dans `Releases/`. Un tag `vX.Y.Z` déclenche également le workflow GitHub Actions de publication.
+
+### Configurer le HTTPS du PC hôte
+
+Le certificat et sa clé privée ne sont jamais intégrés à la release. Sur le PC qui héberge l'application :
+
+```powershell
+winget install --id FiloSottile.mkcert -e
+powershell -ExecutionPolicy Bypass -File .\deploy\setup-https.ps1 -StateRoot "$env:LOCALAPPDATA\DicteeCourriels"
+```
+
+Importer ensuite le fichier `rootCA.pem` indiqué par le script sur les téléphones ou ordinateurs clients. Régénérer le certificat si l'adresse IP LAN du serveur change.
+
 ## Reprendre le développement après un `git pull`
 
 Depuis la racine du dépôt, sous PowerShell :
